@@ -35,14 +35,6 @@ Contributions are welcome! If you have a new malware technique to implement or i
 
 This repository is intended for educational purposes only. The techniques and code provided are meant to enhance understanding of malware development and should not be used for malicious activities. The authors are not responsible for any misuse of the information provided in this repository.
 
-## License
-
-This project is licensed under the MIT License. See the [LICENSE](./LICENSE) file for more details.
-
 ## Contact
 
-For any questions or inquiries, feel free to reach out via GitHub issues or contact me directly through my [cybersecurity blog](https://example.com).
-
----
-
-Feel free to customize this template further based on your preferences and additional information about your project.
+For any questions or inquiries, feel free to reach out via GitHub issues or contact me directly through Social Media.
