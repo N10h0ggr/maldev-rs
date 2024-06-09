@@ -21,7 +21,7 @@ impl Crc32 {
     }
 
     // Compute the CRC32 checksum
-    pub fn checksum(&self, bytes: &[u8]) -> u32 {
+    pub fn compute_hash(&self, bytes: &[u8]) -> u32 {
         let mut crc = 0xffffffff;
         for &byte in bytes {
             let index = ((crc as u8) ^ byte) as usize;
@@ -38,6 +38,6 @@ mod tests {
     fn test_crc32_ascii() {
         let crc32 = Crc32::new();
         let data = b"_CRC32";
-        assert_eq!(crc32.checksum(data), 0x7C2DF918);
+        assert_eq!(crc32.compute_hash(data), 0x7C2DF918);
     }
 }
