@@ -1,15 +1,17 @@
 pub mod hash;
 
 use std::arch::asm;
+use std::ffi::OsString;
+use std::os::windows::ffi::OsStringExt;
 use windows::Win32::System::Threading::{PEB, PEB_LDR_DATA, TEB};
 use std::ptr;
-use windows::Win32::Foundation::{HANDLE, HMODULE};
+use windows::Win32::Foundation::{HMODULE};
 use windows::Win32::System::WindowsProgramming::LDR_DATA_TABLE_ENTRY;
 use windows::Win32::System::SystemServices::{IMAGE_DOS_HEADER, IMAGE_EXPORT_DIRECTORY};
 use windows::Win32::System::Diagnostics::Debug::IMAGE_NT_HEADERS64;
-use std::ffi::CStr;
-use std::slice;
-use windows::core::{PCSTR, PWSTR};
+use windows::Win32::Globalization::*;
+use windows::core::{PCWSTR, PWSTR};
+use crate::hash::FastCrc32;
 
 #[cfg(target_arch = "x86")]
 pub unsafe fn get_teb() -> *mut TEB {
@@ -33,30 +35,36 @@ pub unsafe fn get_peb() -> *mut PEB {
 /// Retrieves the module handle for a given DLL name.
 ///
 /// # Arguments
-/// * `dll_name` - The name of the DLL for which to get the module handle.
+/// * `dll_name_hash` - The crc32 hash of the DLL name in uppercase for which to get the module handle.
 ///
 /// # Returns
 /// * `Option<*const u8>` - The pointer of the module if found, or `None` if not found.
-unsafe fn get_module_handle(module_name: &str) -> Option<*const u8> {
-    let ws_module_name = PWSTR(module_name.as_ptr() as *mut u16);
+unsafe fn get_module_handle_by_hash(dll_name_hash: u32) -> Option<*const u8> {
     let mut peb: *const PEB = get_peb();
     let mut p_ldr: *const PEB_LDR_DATA = (*peb).Ldr;
-    let mut p_dte: *const LDR_DATA_TABLE_ENTRY = (*p_ldr).InMemoryOrderModuleList.Flink as _;
+    let mut p_dte: *const LDR_DATA_TABLE_ENTRY = (*p_ldr).InMemoryOrderModuleList.Flink as *const LDR_DATA_TABLE_ENTRY;
+
+    let crc32 = FastCrc32::new();
 
     while let Some(p_dte_ref) = p_dte.as_ref() {
         if !p_dte_ref.FullDllName.Buffer.is_null() {
-            // Check if the module names match
-            if p_dte_ref.FullDllName.Buffer == ws_module_name {
-                // Print the name of the found DLL
-                println!("[+] Found Dll \"{:?}\"", p_dte_ref.FullDllName.Buffer);
-                return Some(p_dte_ref.Reserved2[0] as *const u8);
+            let dte_name_upper = p_dte_ref.FullDllName.Buffer.to_string().unwrap().to_uppercase();
+            let dte_name_hash = crc32.compute_hash(dte_name_upper.as_bytes());
+            if dte_name_hash == dll_name_hash {
+                return Some(p_dte_ref.Reserved2[0] as _);
             }
         } else { break; }
         // Next element in the linked list
-        p_dte = p_dte_ref.InMemoryOrderLinks.Flink as *const _ ;
+        p_dte = p_dte_ref.Reserved1[0] as *const LDR_DATA_TABLE_ENTRY ;
     }
     None
 }
+
+// unsafe fn get_module_handle(dll_name: PCWSTR) -> Option<*const u8> {
+//     let crc32 = Crc32::new();
+//     let hash = dll_name.to_string().unwrap().as_bytes();
+//     get_module_handle_by_hash(hash)
+// }
 
 /// Retrieves the NT headers for a given module handle.
 ///
@@ -103,7 +111,7 @@ unsafe fn get_export_directory(module_handle: HMODULE) -> Option<*const IMAGE_EX
 ///
 /// # Returns
 /// * `Vec<String>` - A vector containing the names of all exported functions.
-pub unsafe fn get_exported_functions(dll_name: &str) -> Vec<String> {
+/*pub unsafe fn get_exported_functions(dll_name: &str) -> Vec<String> {
     let mut exported_functions = Vec::new();
 
     if let Some(module_handle) = get_module_handle(dll_name) {
@@ -122,19 +130,31 @@ pub unsafe fn get_exported_functions(dll_name: &str) -> Vec<String> {
     }
 
     exported_functions
-}
+}*/
 
 #[cfg(test)]
 mod tests {
+    use windows::core::w;
+    use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use super::*;
 
     #[test]
-    fn test_get_exported_functions() {
+    fn test_get_module_handle_by_hash() {
+        let crc32 = FastCrc32::new();
+
         unsafe {
-            let dll_name = "C:\\Windows\\System32\\kernel32.dll";
-            let exported_functions = get_exported_functions(dll_name);
-            assert!(!exported_functions.is_empty());
-            println!("{:?}", exported_functions);
+            let dll_name = w!("NTDLL.DLL");
+            let dll_hash = crc32.compute_hash(dll_name.to_string().unwrap().as_bytes());
+
+            // WinAPI handle
+            let win_handle = GetModuleHandleW(dll_name).unwrap();
+            // Our custom handle
+            let custom_handle = get_module_handle_by_hash(dll_hash).unwrap() as _;
+
+            println!("custom handle: {:?}", HMODULE(custom_handle));
+            println!("windows handle: {:?}", win_handle);
+
+            assert_eq!(win_handle, HMODULE(custom_handle))
         }
     }
 }

@@ -1,8 +1,8 @@
-pub struct Crc32 {
+pub struct FastCrc32 {
     table: [u32; 256],
 }
 
-impl Crc32 {
+impl FastCrc32 {
     // Initialize the CRC32 table
     pub fn new() -> Self {
         let mut table = [0u32; 256];
@@ -17,7 +17,7 @@ impl Crc32 {
             }
             table[i as usize] = crc;
         }
-        Crc32 { table }
+        FastCrc32 { table }
     }
 
     // Compute the CRC32 checksum
@@ -27,17 +27,41 @@ impl Crc32 {
             let index = ((crc as u8) ^ byte) as usize;
             crc = self.table[index] ^ (crc >> 8);
         }
-        crc ^ 0xffffffff
+        (crc ^ 0xffffffff) as _
     }
+}
+
+fn compute_crc32_hash(data: &[u8]) -> u32 {
+    let mut crc: u32 = 0xFFFFFFFF;
+    const CRC32_POLYNOMIAL: u32 = 0xEDB88320;
+
+    for byte in data.iter() {
+        crc ^= *byte as u32;
+        for _ in 0..8 {
+            if crc & 1 != 0 {
+                crc = (crc >> 1) ^ CRC32_POLYNOMIAL;
+            } else {
+                crc >>= 1;
+            }
+        }
+    }
+
+    crc ^ 0xFFFFFFFF
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
-    fn test_crc32_ascii() {
-        let crc32 = Crc32::new();
+    fn test_fast_crc32_ascii() {
+        let crc32 = FastCrc32::new();
         let data = b"_CRC32";
-        assert_eq!(crc32.compute_hash(data), 0x7C2DF918);
+        assert_eq!(crc32.compute_hash(data), 0x7C2DF918u32);
+    }
+
+    #[test]
+    fn test_compute_crc32_hash() {
+        let data = b"_CRC32";
+        assert_eq!(compute_crc32_hash(data), 0x7C2DF918u32);
     }
 }

@@ -69,9 +69,4 @@ mod private_tests {
         assert_eq!(compute_str_hash(&crc32,"NtCreateThreadEx"), 0x2073465A);
         assert_eq!(compute_str_hash(&crc32,"NtWaitForSingleObject"), 0xDD554681);
     }
-
-    fn load_module_test {
-        let ntdll_base_address = unsafe { get_loaded_module_by_hash(NTDLL_HASH) };
-    }
-
 }
