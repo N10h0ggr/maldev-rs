@@ -31,7 +31,7 @@ impl FastCrc32 {
     }
 }
 
-fn compute_crc32_hash(data: &[u8]) -> u32 {
+pub fn compute_crc32_hash(data: &[u8]) -> u32 {
     let mut crc: u32 = 0xFFFFFFFF;
     const CRC32_POLYNOMIAL: u32 = 0xEDB88320;
 
