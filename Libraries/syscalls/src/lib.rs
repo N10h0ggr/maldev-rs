@@ -22,6 +22,8 @@ struct NtdllConfig {
 }
 type PNtdllConfig = *mut NtdllConfig;
 
+static NT_DLL_CONFIG: NtdllConfig = NtdllConfig::new()?;
+
 impl NtdllConfig {
     pub fn new() -> Option<Self> {
         unsafe {
@@ -62,10 +64,19 @@ impl NtdllConfig {
     }
 }
 
+#[repr(C)]
+pub struct NtSyscall {
+    dw_ssn: u32,
+    dw_syscall_hash: u32,
+    p_syscall_address: *mut std::ffi::c_void,
+}
+pub type PntSyscall = *mut NtSyscall;
+
+
 pub unsafe fn prepare_syscall(hash: u32){
-    // Initialize ntdll if not already initialized
-    // FetchNtSyscall already part of direct syscall? -> Initialize
-    //
+    // Implementation of FetchNtSyscall
+    // Uses the _NT_SYSCALL struct
+    // use static NT_DLL_CONFIG instance
 }
 
 #[test]
