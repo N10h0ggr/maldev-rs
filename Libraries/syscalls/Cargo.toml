@@ -12,3 +12,4 @@ features = ["Win32_System_Threading", "Win32_System_Kernel"]
 
 [dependencies]
 utils = { path = "../utils"}
+log = "0.4.21"

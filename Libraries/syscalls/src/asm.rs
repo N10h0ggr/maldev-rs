@@ -42,17 +42,26 @@ global_asm!(
 
 extern "C" {
     pub fn set_ssn(ssn: u8);
-    pub fn run_syscall();
+    pub fn run_syscall(...);
 }
 
 #[cfg(test)]
 mod private_tests {
+    use std::ffi::c_void;
+    use std::ptr::null;
+    use windows::Win32::Foundation::HANDLE;
+    use windows::Win32::System::Memory::{MEM_COMMIT, MEM_RESERVE, PAGE_READWRITE};
     use super::*;
 
     #[test]
     fn test_set_ssn() {
-        unsafe {
-            set_ssn(0x0001u8);
-        }
+        unsafe { set_ssn(0x0001u8); }
     }
+
+/*    #[test]
+    fn test_run_syscall() {
+        unsafe {
+            run_syscall(HANDLE(-1), null() as *mut *mut c_void, 0, 32 as *mut usize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        }
+    }*/
 }
