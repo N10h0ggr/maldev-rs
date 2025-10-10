@@ -1,0 +1,16 @@
+[workspace]
+members = [
+  "hooking",
+  "injections",
+  "syscalls",
+  "utils",
+  "winapi",
+]
+resolver = "3"
+
+[workspace.dependencies]
+windows-sys = { version = "0.61.2", features = [
+  "Win32_System_WindowsProgramming",
+  "Win32_System_LibraryLoader",
+  "Wdk_System_SystemInformation"
+]}
