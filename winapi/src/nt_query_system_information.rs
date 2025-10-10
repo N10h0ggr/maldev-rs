@@ -28,12 +28,6 @@ use utils::unicode_string_to_string;
 /// Windows internals. Incorrect structure definitions or buffer handling can cause
 /// undefined behavior. Validate all pointers, lengths, and return codes.
 pub fn get_remote_process_threads(proc_name: String) -> Result<(usize, usize), String> {
-    // TODO:
-    // - Resolve NtQuerySystemInformation from ntdll.dll
-    // - Perform two-call pattern to get required buffer size and data
-    // - Walk SYSTEM_PROCESS_INFORMATION list comparing ImageName to `proc_name`
-    // - Return PID and main thread TID if found
-
     // fetch NtQuerySystemInformation address from ntdll
     let lpmodulename = s!("ntdll.dll");
     let lpprocname = s!("NtQuerySystemInformation");
@@ -122,6 +116,7 @@ pub fn get_remote_process_threads(proc_name: String) -> Result<(usize, usize), S
 mod tests {
     use super::*;
 
+    // cargo test test_find_system_process -- --nocapture
     #[test]
     #[cfg(target_os = "windows")]
     fn test_find_system_process() {
