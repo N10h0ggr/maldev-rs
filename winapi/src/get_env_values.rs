@@ -1,28 +1,5 @@
+use crate::get_peb;
 use crate::structs::RtlUserProcessParameters;
-use std::arch::asm;
-use windows_sys::Win32::System::Threading::PEB;
-
-/// Retrieves the current Process Environment Block (PEB) pointer for the calling process.
-///
-/// # Safety
-/// This function uses inline assembly to read the `gs:[0x60]` segment register,
-/// which stores a pointer to the `PEB` structure on 64-bit Windows.
-///
-/// # Returns
-/// - `Some(PEB)` if the pointer is valid and dereferenced successfully.
-/// - `None` if the retrieved PEB pointer is null.
-///
-/// # Platform
-/// Works only on 64-bit Windows; will not compile elsewhere.
-fn get_peb() -> Option<PEB> {
-    let peb: *mut PEB;
-    unsafe { asm!("mov {peb}, gs:[0x60]", peb = out(reg) peb) };
-    if !peb.is_null() {
-        Some(unsafe { *peb })
-    } else {
-        None
-    }
-}
 
 /// Searches for an environment variable by name within a vector of `KEY=VALUE` strings.
 ///
@@ -34,12 +11,6 @@ fn get_peb() -> Option<PEB> {
 ///
 /// # Returns
 /// `Some(String)` containing the variable’s value if found, or `None` if absent.
-///
-/// # Example
-/// ```
-/// let vars = vec!["USER=John".to_string(), "PATH=C:\\Windows".to_string()];
-/// assert_eq!(get_env_value(&vars, "path"), Some("C:\\Windows".to_string()));
-/// ```
 pub fn get_env_value(vars: &[String], key: &str) -> Option<String> {
     let key_upper = key.to_ascii_uppercase();
     vars.iter().find_map(|v| {

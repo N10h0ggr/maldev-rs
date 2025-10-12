@@ -120,7 +120,7 @@ mod tests {
     #[test]
     #[cfg(target_os = "windows")]
     fn test_find_system_process() {
-        let result = get_remote_process_threads("notepad.exe".to_string());
+        let result = get_remote_process_threads("nvim.exe".to_string());
         match result {
             Ok((pid, tid)) => {
                 println!("Found: PID={} TID={}", pid, tid);
