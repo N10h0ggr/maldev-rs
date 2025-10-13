@@ -59,7 +59,7 @@ pub fn install_breakpoint(
     }
 
     // Try to open the target thread by ID
-    let desired_access = THREAD_GET_CONTEXT | THREAD_SET_CONTEXT | THREAD_SUSPEND_RESUME;
+    let desired_access = THREAD_GET_CONTEXT | THREAD_SET_CONTEXT;
     let current_thread_id = unsafe { GetCurrentThreadId() };
 
     let h_thread: HANDLE = if thread_id == current_thread_id as usize {
