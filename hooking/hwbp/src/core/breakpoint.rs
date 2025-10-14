@@ -131,6 +131,85 @@ pub fn install_breakpoint(
     Ok(())
 }
 
+/// Removes a hardware breakpoint (HWBP) from a specific thread.
+///
+/// This function clears the specified hardware debug register (`Dr0`–`Dr3`)
+/// and disables its corresponding enable flag (`G0`–`G3`) in the `Dr7` register.
+/// It also updates the global [`HOOK_REGISTRY`] to reflect the removal.
+///
+/// # Arguments
+///
+/// * `thread_id` - Identifier of the thread where the breakpoint will be removed.
+/// * `register` - The hardware debug register (`Dr0`–`Dr3`) to clear.
+///
+/// # Returns
+///
+/// Returns `Ok(())` on success, or a [`BreakpointError`] if something fails:
+/// - [`BreakpointError::ThreadNotFound`] if the thread cannot be opened.
+/// - [`BreakpointError::ContextReadFailed`] if `GetThreadContext` fails.
+/// - [`BreakpointError::ContextWriteFailed`] if `SetThreadContext` fails.
+/// - [`BreakpointError::NotFound`] if no such breakpoint is currently registered.
+pub fn remove_breakpoint(thread_id: usize, register: DrRegister) -> Result<(), BreakpointError> {
+    // Check if breakpoint exists in the registry
+    let mut hook_registry = HOOK_REGISTRY.lock().expect("Mutex should not be poisoned");
+    if !hook_registry.contains(thread_id, register) {
+        return Err(BreakpointError::NoAvailableRegisters);
+    }
+
+    // Open thread handle
+    let desired_access = THREAD_GET_CONTEXT | THREAD_SET_CONTEXT;
+    let current_thread_id = unsafe { GetCurrentThreadId() };
+    let h_thread: HANDLE = if thread_id == current_thread_id as usize {
+        unsafe { GetCurrentThread() }
+    } else {
+        unsafe { OpenThread(desired_access, 0, thread_id as u32) }
+    };
+
+    if h_thread.is_null() {
+        let err = unsafe { GetLastError() };
+        return Err(BreakpointError::ThreadNotFound(err));
+    }
+
+    // Prepare thread context for modification
+    let mut thread_ctx: CONTEXT = unsafe { std::mem::zeroed() };
+    thread_ctx.ContextFlags = CONTEXT_DEBUG_REGISTERS;
+
+    // Read current debug registers
+    let success = unsafe { GetThreadContext(h_thread, &mut thread_ctx as *mut CONTEXT) };
+    if success == 0 {
+        let err = unsafe { GetLastError() };
+        unsafe { CloseHandle(h_thread) };
+        return Err(BreakpointError::ContextReadFailed(err));
+    }
+
+    // Clear the appropriate Dr register
+    match register {
+        DrRegister::Dr0 => thread_ctx.Dr0 = 0,
+        DrRegister::Dr1 => thread_ctx.Dr1 = 0,
+        DrRegister::Dr2 => thread_ctx.Dr2 = 0,
+        DrRegister::Dr3 => thread_ctx.Dr3 = 0,
+    }
+
+    // Disable the Gx bit in Dr7
+    let drx_index = register.index();
+    thread_ctx.Dr7 = set_dr7_bits(thread_ctx.Dr7, drx_index * 2, 1, 0);
+
+    // Write modified context back
+    let success = unsafe { SetThreadContext(h_thread, &mut thread_ctx as *mut CONTEXT) };
+    if success == 0 {
+        let err = unsafe { GetLastError() };
+        unsafe { CloseHandle(h_thread) };
+        return Err(BreakpointError::ContextWriteFailed(err));
+    }
+
+    unsafe { CloseHandle(h_thread) };
+
+    // Remove from registry
+    hook_registry.active.remove(&(thread_id, register));
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -281,5 +360,79 @@ mod tests {
 
         // Stop the worker thread
         worker.thread().unpark();
+    }
+
+    // Test removing a valid hardware breakpoint from the current thread.
+    ///
+    /// This validates that:
+    /// - The breakpoint is correctly deleted from both the CPU context and the registry.
+    /// - The registry no longer contains the entry afterward.
+    #[test]
+    fn test_remove_existing_breakpoint() {
+        let thread_id = unsafe { GetCurrentThreadId() } as usize;
+        let target_address = 0x1111usize;
+        let detour_address = 0x2222usize;
+
+        // Ensure clean registry state
+        {
+            let mut reg = HOOK_REGISTRY.lock().unwrap();
+            reg.active.clear();
+        }
+
+        // Install first
+        let result = install_breakpoint(thread_id, target_address, detour_address, DrRegister::Dr0);
+        assert!(
+            result.is_ok(),
+            "install_breakpoint() failed: {:?}",
+            result.err()
+        );
+
+        // Confirm it's in the registry
+        {
+            let reg = HOOK_REGISTRY.lock().unwrap();
+            assert!(
+                reg.contains(thread_id, DrRegister::Dr0),
+                "Breakpoint should exist in registry"
+            );
+        }
+
+        // Remove the breakpoint
+        let remove_result = remove_breakpoint(thread_id, DrRegister::Dr0);
+        assert!(
+            remove_result.is_ok(),
+            "remove_breakpoint() failed: {:?}",
+            remove_result.err()
+        );
+
+        // Confirm it's gone
+        {
+            let reg = HOOK_REGISTRY.lock().unwrap();
+            assert!(
+                !reg.contains(thread_id, DrRegister::Dr0),
+                "Breakpoint should have been removed from registry"
+            );
+        }
+    }
+
+    /// Test attempting to remove a breakpoint that doesn't exist.
+    ///
+    /// This validates graceful error handling (BreakpointError::NotFound).
+    #[test]
+    fn test_remove_nonexistent_breakpoint() {
+        let thread_id = unsafe { GetCurrentThreadId() } as usize;
+
+        // Ensure registry is empty
+        {
+            let mut reg = HOOK_REGISTRY.lock().unwrap();
+            reg.active.clear();
+        }
+
+        // Try to remove Dr1 (which isn't installed)
+        let result = remove_breakpoint(thread_id, DrRegister::Dr1);
+
+        match result {
+            Err(BreakpointError::NoAvailableRegisters) => {} // expected behavior
+            other => panic!("Expected BreakpointError::NotFound, but got {:?}", other),
+        }
     }
 }

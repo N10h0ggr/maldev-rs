@@ -43,7 +43,7 @@ impl fmt::Display for BreakpointError {
                 f,
                 "Failed to write the thread context (Win32 error: {code})"
             ),
-            NoAvailableRegisters => write!(f, "No available hardware breakpoint registers"),
+            NoAvailableRegisters => write!(f, "The hardware breakpoint is not available"),
             Unknown(code) => write!(f, "An unknown error occurred (Win32 error: {code})"),
         }
     }
