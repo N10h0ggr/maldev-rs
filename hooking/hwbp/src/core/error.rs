@@ -22,6 +22,9 @@ pub enum BreakpointError {
     /// No free debug registers were available in the thread context.
     NoAvailableRegisters,
 
+    /// AddVectoredExceptionHandler failed; carries GetLastError() code.
+    VehRegistrationFailed(u32),
+
     /// A general or unspecified error occurred.
     Unknown(u32),
 }
@@ -44,6 +47,7 @@ impl fmt::Display for BreakpointError {
                 "Failed to write the thread context (Win32 error: {code})"
             ),
             NoAvailableRegisters => write!(f, "The hardware breakpoint is not available"),
+            VehRegistrationFailed(code) => write!(f, "AddVectoredExceptionHandler failed: {code}"),
             Unknown(code) => write!(f, "An unknown error occurred (Win32 error: {code})"),
         }
     }

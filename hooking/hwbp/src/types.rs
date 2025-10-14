@@ -11,6 +11,9 @@ use std::{
 ///
 /// Access is synchronized using a `Mutex`, so operations on the registry
 /// must lock it before modification:
+/// ```
+/// let mut registry = HOOK_REGISTRY.lock().unwrap();
+/// ```
 pub static HOOK_REGISTRY: LazyLock<Mutex<HookRegistry>> =
     LazyLock::new(|| Mutex::new(HookRegistry::default()));
 
@@ -102,6 +105,10 @@ pub struct HookDescriptor {
 pub struct HookRegistry {
     /// Flat mapping of `(thread_id, DrRegister)` to an active [`HookDescriptor`].
     pub active: HashMap<(usize, DrRegister), HookDescriptor>,
+
+    /// Handle returned by AddVectoredExceptionHandler encoded as usize.
+    /// None = VEH not registered.
+    pub veh_handle: Option<usize>,
 }
 
 impl HookRegistry {
