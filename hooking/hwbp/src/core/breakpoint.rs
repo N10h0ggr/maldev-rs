@@ -1,12 +1,12 @@
 use std::os::windows::raw::HANDLE;
 
 use crate::core::error::BreakpointError;
-use crate::types::{BreakpointState, DrRegister, HookDescriptor};
+use crate::types::{BreakpointState, DrRegister, HOOK_REGISTRY, HookDescriptor};
+use crate::utils::set_dr7_bits;
 use windows_sys::Win32::Foundation::{CloseHandle, GetLastError};
 use windows_sys::Win32::System::Diagnostics::Debug::{CONTEXT, GetThreadContext, SetThreadContext};
 use windows_sys::Win32::System::Threading::{
     GetCurrentThread, GetCurrentThreadId, OpenThread, THREAD_GET_CONTEXT, THREAD_SET_CONTEXT,
-    THREAD_SUSPEND_RESUME,
 };
 
 #[cfg(target_arch = "x86")]
@@ -53,7 +53,7 @@ pub fn install_breakpoint(
     target_address: usize,
     detour_address: usize,
     register: DrRegister,
-) -> Result<HookDescriptor, BreakpointError> {
+) -> Result<(), BreakpointError> {
     if target_address == 0 || detour_address == 0 {
         return Err(BreakpointError::InvalidAddress);
     }
@@ -61,9 +61,10 @@ pub fn install_breakpoint(
     // Try to open the target thread by ID
     let desired_access = THREAD_GET_CONTEXT | THREAD_SET_CONTEXT;
     let current_thread_id = unsafe { GetCurrentThreadId() };
+    let mut objective_thread = thread_id;
 
     let h_thread: HANDLE = if thread_id == current_thread_id as usize {
-        // Use pseudo-handle for current thread
+        objective_thread = current_thread_id as _;
         unsafe { GetCurrentThread() }
     } else {
         // Open real handle for external thread
@@ -86,6 +87,13 @@ pub fn install_breakpoint(
         return Err(BreakpointError::ContextReadFailed(err));
     }
 
+    // Check if register is available
+    let mut hook_registry = HOOK_REGISTRY.lock().expect("Mutex should not be poisoned");
+    if hook_registry.contains(objective_thread, register) {
+        unsafe { CloseHandle(h_thread) };
+        return Err(BreakpointError::NoAvailableRegisters);
+    }
+
     // Set the requested debug register
     match register {
         DrRegister::Dr0 => thread_ctx.Dr0 = target_address as u64,
@@ -93,6 +101,10 @@ pub fn install_breakpoint(
         DrRegister::Dr2 => thread_ctx.Dr2 = target_address as u64,
         DrRegister::Dr3 => thread_ctx.Dr3 = target_address as u64,
     }
+
+    // Enable the breakopint
+    let drx_index = register.index();
+    thread_ctx.Dr7 = set_dr7_bits(thread_ctx.Dr7, drx_index * 2, 1, 1);
 
     // Write the modified context back
     let success = unsafe { SetThreadContext(h_thread, &mut thread_ctx as *mut CONTEXT) };
@@ -104,13 +116,19 @@ pub fn install_breakpoint(
 
     unsafe { CloseHandle(h_thread) };
 
-    Ok(HookDescriptor {
+    let hook_descriptor = HookDescriptor {
         target_address: Some(target_address),
         detour_address: Some(detour_address),
         register: Some(register),
         state: BreakpointState::Active,
-        thread_id: Some(thread_id),
-    })
+        thread_id: Some(objective_thread),
+    };
+
+    hook_registry
+        .active
+        .insert((thread_id, register), hook_descriptor);
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -158,18 +176,31 @@ mod tests {
         let target_address = 0x1234usize;
         let detour_address = 0x5678usize;
 
+        // Execute installation
         let result = install_breakpoint(thread_id, target_address, detour_address, DrRegister::Dr0);
+        assert!(
+            result.is_ok(),
+            "install_breakpoint() failed: {:?}",
+            result.err()
+        );
 
-        match result {
-            Ok(desc) => {
-                assert_eq!(desc.target_address, Some(target_address));
-                assert_eq!(desc.detour_address, Some(detour_address));
-                assert_eq!(desc.register, Some(DrRegister::Dr0));
-                assert_eq!(desc.thread_id, Some(thread_id));
-                assert_eq!(desc.state, BreakpointState::Active);
-            }
-            Err(err) => panic!("install_breakpoint() failed with error: {}", err),
-        }
+        // Validate it was stored in the global registry
+        let registry = HOOK_REGISTRY.lock().unwrap();
+        assert!(
+            registry.contains(thread_id, DrRegister::Dr0),
+            "Breakpoint not found in registry after installation"
+        );
+
+        let desc = registry
+            .active
+            .get(&(thread_id, DrRegister::Dr0))
+            .expect("Descriptor not found");
+
+        assert_eq!(desc.target_address, Some(target_address));
+        assert_eq!(desc.detour_address, Some(detour_address));
+        assert_eq!(desc.register, Some(DrRegister::Dr0));
+        assert_eq!(desc.thread_id, Some(thread_id));
+        assert_eq!(desc.state, BreakpointState::Active);
     }
 
     /// Installing a breakpoint on an external thread while suspended.
@@ -192,12 +223,18 @@ mod tests {
             assert!(suspend_count != u32::MAX, "SuspendThread failed");
 
             // Attempt to install the hardware breakpoint
-            let result = install_breakpoint(tid as usize, 0x12345678, 0x87654321, DrRegister::Dr0);
-
+            let result = install_breakpoint(tid as usize, 0x12345678, 0x87654321, DrRegister::Dr1);
             assert!(
                 result.is_ok(),
                 "install_breakpoint() failed on suspended thread: {:?}",
                 result.err()
+            );
+
+            // Validate registry state
+            let registry = HOOK_REGISTRY.lock().unwrap();
+            assert!(
+                registry.contains(tid as usize, DrRegister::Dr1),
+                "Breakpoint not found in registry after installation"
             );
 
             // Resume and clean up
@@ -212,8 +249,8 @@ mod tests {
 
     /// Installing a breakpoint on an external thread that is not suspended.
     ///
-    /// Warning: Windows may return ERROR_NOACCESS (998) or a similar error because a live
-    /// thread’s context cannot be safely accessed with GetThreadContext.
+    /// Warning: Windows may return ERROR_NOACCESS (998) or similar error
+    /// because a live thread’s context cannot be safely accessed.
     #[test]
     fn test_install_breakpoint_on_external_thread_unsuspended() {
         let (worker, tid) = spawn_test_thread();
@@ -225,11 +262,18 @@ mod tests {
             assert!(!h_thread.is_null(), "OpenThread failed");
 
             // Attempt to install the breakpoint without suspending
-            let result = install_breakpoint(tid as usize, 0xAAAABBBB, 0xBBBBCCCC, DrRegister::Dr1);
+            let result = install_breakpoint(tid as usize, 0xAAAABBBB, 0xBBBBCCCC, DrRegister::Dr2);
             assert!(
                 result.is_ok(),
-                "install_breakpoint() failed on suspended thread: {:?}",
+                "install_breakpoint() failed on unsuspended thread: {:?}",
                 result.err()
+            );
+
+            // Validate registry state
+            let registry = HOOK_REGISTRY.lock().unwrap();
+            assert!(
+                registry.contains(tid as usize, DrRegister::Dr2),
+                "Breakpoint not found in registry after installation"
             );
 
             CloseHandle(h_thread);
