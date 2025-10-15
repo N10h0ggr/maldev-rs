@@ -5,3 +5,7 @@ edition = "2024"
 
 [dependencies]
 windows-sys.workspace = true
+
+[profile.dev]
+debug = true
+opt-level = 0

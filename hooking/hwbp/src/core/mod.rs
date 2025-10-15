@@ -97,67 +97,113 @@ pub fn uninitialize_hwbp_runtime() {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use windows_sys::Win32::System::Diagnostics::Debug::CONTEXT;
-    use windows_sys::Win32::System::Threading::GetCurrentThreadId;
+    use std::ffi::CStr;
+    use windows_sys::Win32::{
+        Foundation::HWND,
+        System::Diagnostics::Debug::CONTEXT,
+        System::Threading::GetCurrentThreadId,
+        UI::WindowsAndMessaging::{MB_OK, MessageBoxA},
+    };
 
     use crate::core::breakpoint::{install_breakpoint, remove_breakpoint};
     use crate::core::{initialize_hwbp_runtime, uninitialize_hwbp_runtime};
     use crate::types::DrRegister;
 
-    static DETOUR_HIT: AtomicBool = AtomicBool::new(false);
-
-    /// Our test target function to hook.
-    extern "system" fn test_target(a: i32, b: i32) -> i32 {
-        println!("[i] Inside original test_target({}, {})", a, b);
-        a + b
-    }
-
-    /// Detour that modifies the parameters (registers) and flags that it ran.
-    unsafe extern "system" fn test_detour(ctx: *mut CONTEXT) {
-        if ctx.is_null() {
-            return;
-        }
-        let ctx = &mut *ctx;
-        #[cfg(target_arch = "x86_64")]
-        {
-            // x64 calling convention: first 4 args = RCX, RDX, R8, R9
-            ctx.Rcx = 10;
-            ctx.Rdx = 20;
-        }
-
-        DETOUR_HIT.store(true, Ordering::SeqCst);
-
-        // Set Resume Flag
+    /// Simple in-test helper: sets the Resume Flag (bit 16) in EFLAGS to continue after detour.
+    fn continue_execution(ctx: &mut CONTEXT) {
         ctx.EFlags |= 1 << 16;
     }
 
+    /// Minimal detour for MessageBoxA.  
+    /// Prints old parameters, modifies them, and resumes execution.
+    unsafe extern "system" fn message_box_a_detour(ctx: *mut CONTEXT) {
+        if ctx.is_null() {
+            return;
+        }
+
+        let ctx = unsafe { &mut *ctx };
+
+        #[cfg(target_arch = "x86_64")]
+        {
+            let rcx = ctx.Rcx as *const i8; // HWND (unused)
+            let rdx = ctx.Rdx as *const i8; // LPCSTR lpText
+            let r8 = ctx.R8 as *const i8; // LPCSTR lpCaption
+            let r9 = ctx.R9; // UINT uType
+
+            println!("[i] MessageBoxA Detour hit!");
+            if !rdx.is_null() {
+                let text = unsafe { CStr::from_ptr(rdx).to_string_lossy() };
+                println!("\tOld text: {}", text);
+            }
+            if !r8.is_null() {
+                let caption = unsafe { CStr::from_ptr(r8).to_string_lossy() };
+                println!("\tOld caption: {}", caption);
+            }
+
+            // Modify parameters
+            ctx.Rdx = b"This Is The Hook\0".as_ptr() as u64;
+            ctx.R8 = b"MessageBoxADetour\0".as_ptr() as u64;
+            ctx.R9 = 0x00000040; // MB_ICONEXCLAMATION
+        }
+
+        continue_execution(ctx);
+    }
+
+    /// Tests installing and triggering a hardware breakpoint hook on MessageBoxA.
+    ///
+    /// This test emulates the same behavior as the C example in the blog:
+    /// - Hook MessageBoxA via Dr0.
+    /// - Invoke MessageBoxA to trigger the detour.
+    /// - Remove the breakpoint and clean up.
     #[test]
-    fn test_single_thread_hw_breakpoint() {
+    fn test_messageboxa_detour_hook() {
         unsafe {
             initialize_hwbp_runtime().expect("Failed to initialize HWBP runtime");
 
-            let tid = GetCurrentThreadId() as usize;
+            println!("[i] [NOT HOOKED] Showing normal MessageBoxA...");
+            MessageBoxA(
+                0 as HWND,
+                b"This is a normal MsgBoxA call (0)\0".as_ptr(),
+                b"Normal\0".as_ptr(),
+                MB_OK,
+            );
 
-            println!("[i] Installing HWBP hook on test_target...");
+            println!("[i] Installing HWBP hook on MessageBoxA...");
+            let thread_id = GetCurrentThreadId() as usize;
             install_breakpoint(
-                tid,
-                test_target as usize,
-                test_detour as usize,
+                thread_id,
+                MessageBoxA as usize,
+                message_box_a_detour as usize,
                 DrRegister::Dr0,
             )
-            .expect("Failed to install HWBP");
+            .expect("Failed to install hardware breakpoint");
 
-            println!("[+] Hook installed.");
+            println!("[+] HWBP hook installed successfully.");
 
-            // Call target on same thread (no new GUI threads)
-            let result = test_target(1, 2);
-            println!("[i] Returned result: {}", result);
+            // Trigger the detour
+            println!("[i] [HOOKED] Triggering MessageBoxA...");
+            MessageBoxA(
+                0 as HWND,
+                b"This won't execute\0".as_ptr(),
+                b"Will it?\0".as_ptr(),
+                MB_OK,
+            );
 
-            assert!(DETOUR_HIT.load(Ordering::SeqCst), "Detour was never hit");
+            // Remove hook
+            println!("[i] Removing hook...");
+            remove_breakpoint(thread_id, DrRegister::Dr0)
+                .expect("Failed to remove hardware breakpoint");
+            println!("[+] Hook removed successfully.");
 
-            println!("[i] Removing HWBP...");
-            remove_breakpoint(tid, DrRegister::Dr0).expect("Failed to remove HWBP");
+            // Normal again
+            println!("[i] [NOT HOOKED] Showing normal MessageBoxA again...");
+            MessageBoxA(
+                0 as HWND,
+                b"This is a normal MsgBoxA call (1)\0".as_ptr(),
+                b"Normal\0".as_ptr(),
+                MB_OK,
+            );
+
             uninitialize_hwbp_runtime();
         }
     }

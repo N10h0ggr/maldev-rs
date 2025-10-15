@@ -10,8 +10,8 @@ use std::{
 /// removing, and inspecting hardware breakpoints globally.
 ///
 /// Access is synchronized using a `Mutex`, so operations on the registry
-/// must lock it before modification:
-/// ```
+/// must lock it before modification can
+/// ```ignore
 /// let mut registry = HOOK_REGISTRY.lock().unwrap();
 /// ```
 pub static HOOK_REGISTRY: LazyLock<Mutex<HookRegistry>> =

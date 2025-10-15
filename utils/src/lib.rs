@@ -220,7 +220,7 @@ mod tests {
         unsafe {
             let dll_name = w!("non_existent_dll.DLL");
             let dll_hash = crc32.compute_hash(
-                unsafe { dll_name.to_string().unwrap().to_uppercase() }
+                unsafe { dll_name.to_string().to_uppercase() }
                     .unwrap()
                     .as_bytes(),
             );
@@ -230,7 +230,7 @@ mod tests {
 
             let dll_name = w!("NTDLL.DLL");
             let dll_hash = crc32.compute_hash(
-                unsafe { dll_name.to_string().to_uppercase() }
+                unsafe { dll_name.to_uppercase() }
                     .unwrap()
                     .as_bytes(),
             );
@@ -240,7 +240,7 @@ mod tests {
 
             let dll_name = w!("Kernel32.dll");
             let dll_hash = crc32.compute_hash(
-                unsafe { dll_name.to_string().to_uppercase() }
+                unsafe { dll_name.to_uppercase() }
                     .unwrap()
                     .as_bytes(),
             );
@@ -250,7 +250,7 @@ mod tests {
 
             let dll_name = w!("gibberish");
             let dll_hash = crc32.compute_hash(
-                unsafe { dll_name.to_string().to_uppercase() }
+                unsafe { dll_name.to_uppercase() }
                     .unwrap()
                     .as_bytes(),
             );

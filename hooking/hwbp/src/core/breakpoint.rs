@@ -54,6 +54,8 @@ pub fn install_breakpoint(
     detour_address: usize,
     register: DrRegister,
 ) -> Result<(), BreakpointError> {
+
+    println!("[install_breakpoint] Requested breakpoint for ({}, Dr{})", thread_id, register.index());
     if target_address == 0 || detour_address == 0 {
         return Err(BreakpointError::InvalidAddress);
     }
@@ -126,7 +128,8 @@ pub fn install_breakpoint(
 
     hook_registry
         .active
-        .insert((thread_id, register), hook_descriptor);
+        .insert((objective_thread, register), hook_descriptor);
+    println!("[install_breakpoint] Saved ({}, Dr{}) to hook_registry", objective_thread, register.index());
 
     Ok(())
 }
