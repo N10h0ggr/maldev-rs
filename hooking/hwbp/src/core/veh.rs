@@ -18,7 +18,8 @@ use windows_sys::Win32::{
 };
 
 use crate::core::breakpoint::{clear_hardware_breakpoint, set_hardware_breakpoint};
-use crate::utils::types::{DrRegister, HOOK_REGISTRY};
+use crate::manager::hook_registry::HOOK_REGISTRY;
+use crate::utils::types::DrRegister;
 
 /// Singleton that manages the lifecycle of the vectored exception handler (VEH).
 ///
@@ -127,13 +128,13 @@ pub unsafe extern "system" fn vector_handler(p_exc: *mut EXCEPTION_POINTERS) -> 
     let exception_addr = exception_record.ExceptionAddress as usize;
 
     // Determine which DRx fired by matching the exception address against DR0..DR3.
-    let drx = if exception_addr == unsafe { context_record.Dr0 as usize } {
+    let drx = if exception_addr ==  { context_record.Dr0 as usize } {
         Some(DrRegister::Dr0)
-    } else if exception_addr == unsafe { context_record.Dr1 as usize } {
+    } else if exception_addr ==  { context_record.Dr1 as usize } {
         Some(DrRegister::Dr1)
-    } else if exception_addr == unsafe { context_record.Dr2 as usize } {
+    } else if exception_addr ==  { context_record.Dr2 as usize } {
         Some(DrRegister::Dr2)
-    } else if exception_addr == unsafe { context_record.Dr3 as usize } {
+    } else if exception_addr ==  { context_record.Dr3 as usize } {
         Some(DrRegister::Dr3)
     } else {
         None

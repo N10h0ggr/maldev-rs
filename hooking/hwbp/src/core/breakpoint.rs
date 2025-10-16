@@ -1,8 +1,8 @@
-use log::{debug, error, info, trace, warn};
+use log::{debug, error, trace, warn};
 use std::ffi::c_void;
 
 use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, HANDLE};
-use windows_sys::Win32::System::Diagnostics::Debug::{CONTEXT, GetThreadContext, SetThreadContext};
+use windows_sys::Win32::System::Diagnostics::Debug::{GetThreadContext, SetThreadContext, CONTEXT};
 use windows_sys::Win32::System::Threading::{
     GetCurrentThread, GetCurrentThreadId, OpenThread, THREAD_GET_CONTEXT, THREAD_SET_CONTEXT,
     THREAD_SUSPEND_RESUME,
@@ -21,8 +21,9 @@ use windows_sys::Win32::System::Diagnostics::Debug::CONTEXT_DEBUG_REGISTERS_ARM 
 use windows_sys::Win32::System::Diagnostics::Debug::CONTEXT_DEBUG_REGISTERS_ARM64 as CONTEXT_DEBUG_REGISTERS;
 
 use crate::core::context::set_dr7_bits;
+use crate::manager::hook_registry::HOOK_REGISTRY;
 use crate::utils::error::HwbpError;
-use crate::utils::types::{BreakpointState, DrRegister, HOOK_REGISTRY, HookDescriptor};
+use crate::utils::types::{BreakpointState, DrRegister, HookDescriptor};
 
 /// Installs a hardware breakpoint (HWBP) in a specific thread.
 ///
@@ -55,12 +56,11 @@ pub fn set_hardware_breakpoint(
     target_address: *const c_void,
     detour: *const c_void,
     register: DrRegister,
-) -> std::result::Result<(), HwbpError> {
+) -> Result<(), HwbpError> {
     if target_address.is_null() || detour.is_null() {
         return Err(HwbpError::InvalidAddress);
     }
 
-    let current_thread_id = unsafe { GetCurrentThreadId() } as usize;
     let desired_access = THREAD_GET_CONTEXT | THREAD_SET_CONTEXT;
     let objective_thread = thread_id;
 
@@ -270,13 +270,14 @@ mod tests {
 
     use crate::core::breakpoint::{clear_hardware_breakpoint, set_hardware_breakpoint};
     use crate::utils::error::HwbpError;
-    use crate::utils::types::{BreakpointState, DrRegister, HOOK_REGISTRY};
+    use crate::utils::types::{BreakpointState, DrRegister};
 
     use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
     use windows_sys::Win32::System::Threading::{
         GetCurrentThreadId, OpenThread, ResumeThread, SuspendThread, THREAD_GET_CONTEXT,
         THREAD_SET_CONTEXT, THREAD_SUSPEND_RESUME,
     };
+    use crate::manager::hook_registry::HOOK_REGISTRY;
 
     /// Spawns a worker thread that reports its Windows thread ID
     /// and keeps running until explicitly stopped.

@@ -145,6 +145,14 @@ impl<'a> CallArgs<'a> {
             }
         }
     }
+
+    /// Used to resume code execution past the hardware breakpoint
+    ///
+    /// # Safety
+    /// - `self.ctx` must be valid and mutable.
+    pub unsafe fn continue_execution(&mut self) {
+        unsafe { (*self.ctx).EFlags |= 1 << 16 }
+    }
 }
 
 #[cfg(target_arch = "x86")]

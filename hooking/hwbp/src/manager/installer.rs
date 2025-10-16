@@ -3,8 +3,9 @@ use log::{debug, error, info, trace, warn};
 
 use crate::core::breakpoint::{clear_hardware_breakpoint, set_hardware_breakpoint};
 use crate::core::thread::enum_threads_ntquery;
+use crate::manager::hook_registry::HOOK_REGISTRY;
 use crate::utils::error::HwbpError;
-use crate::utils::types::{DrRegister, HOOK_REGISTRY, HookDescriptor};
+use crate::utils::types::{DrRegister, HookDescriptor};
 
 /// Installs a hardware breakpoint (HWBP) hook for **all existing threads**
 /// in the current process.
@@ -59,7 +60,7 @@ pub fn install_hook_all_threads(
     for tid in threads {
         let free_drx = {
             // Lock the global hook registry
-            let mut registry = HOOK_REGISTRY
+            let registry = HOOK_REGISTRY
                 .lock()
                 .map_err(|_| HwbpError::RegistryPoisoned)?;
 
