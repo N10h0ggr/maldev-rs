@@ -1,103 +1,13 @@
 pub mod breakpoint;
-pub mod call_args;
-pub mod error;
-pub mod vector_handler;
-
-use windows_sys::Win32::Foundation::GetLastError;
-use windows_sys::Win32::System::Diagnostics::Debug::{
-    AddVectoredExceptionHandler, RemoveVectoredExceptionHandler,
-};
-
-use crate::core::breakpoint::remove_breakpoint;
-use crate::core::error::BreakpointError;
-use crate::core::vector_handler::vector_handler;
-use crate::types::{DrRegister, HOOK_REGISTRY};
-
-/// Initializes the global hardware breakpoint (HWBP) runtime environment.
-///
-/// This function ensures that the global vectored exception handler (VEH)
-/// responsible for handling `EXCEPTION_SINGLE_STEP` events is registered.
-/// It does **not** remove or alter any existing hardware breakpoints.
-///
-/// # Behavior
-/// - Registers the global VEH handler if it has not yet been registered.
-/// - Leaves all currently installed hardware breakpoints untouched.
-/// - Can be called multiple times safely (idempotent).
-///
-/// # Errors
-/// Returns [`BreakpointError::VehRegistrationFailed`] if the call to
-/// [`AddVectoredExceptionHandler`] fails, along with the Windows error code.
-///
-/// # Example
-/// ```ignore
-/// initialize_hwbp_runtime()?;
-/// ```
-///
-/// # Panics
-/// Panics only if the global `HOOK_REGISTRY` mutex is poisoned.
-pub fn initialize_hwbp_runtime() -> Result<(), BreakpointError> {
-    let mut reg = HOOK_REGISTRY.lock().expect("HOOK_REGISTRY mutex poisoned");
-
-    if reg.veh_handle.is_none() {
-        let handle = unsafe { AddVectoredExceptionHandler(1, Some(vector_handler)) };
-        if handle.is_null() {
-            return Err(BreakpointError::VehRegistrationFailed(unsafe {
-                GetLastError()
-            }));
-        }
-        reg.veh_handle = Some(handle as usize);
-    }
-
-    Ok(())
-}
-
-/// Uninitializes the global hardware breakpoint (HWBP) runtime environment.
-///
-/// This function performs a complete cleanup of all hardware breakpoint
-/// infrastructure:
-/// - Removes all active breakpoints (best effort).
-/// - Clears the global registry of hook metadata.
-/// - Unregisters the vectored exception handler if it was installed.
-///
-/// # Behavior
-/// - Each registered hardware breakpoint is removed individually.
-/// - Failures to remove individual breakpoints are ignored to ensure full cleanup.
-/// - Safe to call multiple times (idempotent).
-///
-/// # Safety
-/// This function is safe to call at any time, though calling it while
-/// threads are executing hooked functions may result in undefined behavior.
-///
-/// # Example
-/// ```ignore
-/// uninitialize_hwbp_runtime();
-/// ```
-pub fn uninitialize_hwbp_runtime() {
-    // Copy keys so we don’t hold the lock while removing breakpoints.
-    let keys: Vec<(usize, DrRegister)> = {
-        let reg = HOOK_REGISTRY.lock().expect("HOOK_REGISTRY mutex poisoned");
-        reg.active.keys().cloned().collect()
-    };
-
-    // Best-effort removal of all active hardware breakpoints.
-    for (tid, drx) in keys {
-        let _ = remove_breakpoint(tid, drx);
-    }
-
-    // Clear global registry and unregister the VEH.
-    let mut reg = HOOK_REGISTRY.lock().expect("HOOK_REGISTRY mutex poisoned");
-    reg.active.clear();
-
-    if let Some(h) = reg.veh_handle.take() {
-        unsafe {
-            let _ = RemoveVectoredExceptionHandler(h as _);
-        }
-    }
-}
+pub mod context;
+pub mod thread;
+pub mod veh;
 
 #[cfg(test)]
 mod tests {
+    use core::ffi::c_void;
     use std::ffi::CStr;
+
     use windows_sys::Win32::{
         Foundation::HWND,
         System::Diagnostics::Debug::CONTEXT,
@@ -105,62 +15,81 @@ mod tests {
         UI::WindowsAndMessaging::{MB_OK, MessageBoxA},
     };
 
-    use crate::core::breakpoint::{install_breakpoint, remove_breakpoint};
-    use crate::core::{initialize_hwbp_runtime, uninitialize_hwbp_runtime};
-    use crate::types::DrRegister;
+    use crate::detour::CallArgs;
+    use crate::manager::{install_hwbp, uninstall_hwbp};
 
-    /// Simple in-test helper: sets the Resume Flag (bit 16) in EFLAGS to continue after detour.
-    fn continue_execution(ctx: &mut CONTEXT) {
-        ctx.EFlags |= 1 << 16;
+    /// Sets the Resume Flag (RF, bit 16) in EFLAGS so execution continues after the detour.
+    ///
+    /// Uses `CallArgs::as_mut_context_ptr()` to access the underlying CONTEXT.
+    fn continue_execution(args: &mut CallArgs<'_>) {
+        let ctx_ptr = args.as_mut_context_ptr();
+        if ctx_ptr.is_null() {
+            return;
+        }
+        unsafe {
+            (*ctx_ptr).EFlags |= 1 << 16;
+        }
     }
 
-    /// Minimal detour for MessageBoxA.  
-    /// Prints old parameters, modifies them, and resumes execution.
+    /// Minimal detour for MessageBoxA.
+    ///
+    /// On x64 Windows ABI, the first four integer/pointer args are:
+    /// 1: RCX (HWND), 2: RDX (LPCSTR lpText), 3: R8 (LPCSTR lpCaption), 4: R9 (UINT uType)
+    ///
+    /// We:
+    ///  - print the original `lpText` and `lpCaption`,
+    ///  - replace them,
+    ///  - set `uType` to MB_ICONEXCLAMATION,
+    ///  - set RF to resume.
     unsafe extern "system" fn message_box_a_detour(ctx: *mut CONTEXT) {
         if ctx.is_null() {
             return;
         }
 
-        let ctx = unsafe { &mut *ctx };
+        // SAFETY: VEH provides a valid pointer for the current thread's context.
+        let mut args = unsafe { CallArgs::new(ctx) };
 
         #[cfg(target_arch = "x86_64")]
         {
-            let rcx = ctx.Rcx as *const i8; // HWND (unused)
-            let rdx = ctx.Rdx as *const i8; // LPCSTR lpText
-            let r8 = ctx.R8 as *const i8; // LPCSTR lpCaption
-            let r9 = ctx.R9; // UINT uType
+            // Read current parameters via 1-based indices
+            let _hwnd = unsafe { args.get(1) } as *const i8;
+            let lp_text = unsafe { args.get(2) } as *const i8;
+            let lp_caption = unsafe { args.get(3) } as *const i8;
+            let _u_type = unsafe { args.get(4) };
 
-            println!("[i] MessageBoxA Detour hit!");
-            if !rdx.is_null() {
-                let text = unsafe { CStr::from_ptr(rdx).to_string_lossy() };
-                println!("\tOld text: {}", text);
+            if !lp_text.is_null() {
+                let text = unsafe { CStr::from_ptr(lp_text) }.to_string_lossy();
+                log::debug!("MessageBoxA original text: {}", text);
             }
-            if !r8.is_null() {
-                let caption = unsafe { CStr::from_ptr(r8).to_string_lossy() };
-                println!("\tOld caption: {}", caption);
+            if !lp_caption.is_null() {
+                let cap = unsafe { CStr::from_ptr(lp_caption) }.to_string_lossy();
+                log::debug!("MessageBoxA original caption: {}", cap);
             }
 
-            // Modify parameters
-            ctx.Rdx = b"This Is The Hook\0".as_ptr() as u64;
-            ctx.R8 = b"MessageBoxADetour\0".as_ptr() as u64;
-            ctx.R9 = 0x00000040; // MB_ICONEXCLAMATION
+            // Overwrite: arg2 (lpText), arg3 (lpCaption), arg4 (uType)
+            unsafe {
+                args.set(2, b"This Is The Hook\0".as_ptr() as usize);
+                args.set(3, b"MessageBoxADetour\0".as_ptr() as usize);
+                args.set(4, 0x00000040); // MB_ICONEXCLAMATION
+            }
         }
 
-        continue_execution(ctx);
+        // Ensure execution continues after returning from the detour
+        continue_execution(&mut args);
     }
 
-    /// Tests installing and triggering a hardware breakpoint hook on MessageBoxA.
+    /// Installs and triggers an HWBP hook on `MessageBoxA`, then uninstalls it.
     ///
-    /// This test emulates the same behavior as the C example in the blog:
-    /// - Hook MessageBoxA via Dr0.
-    /// - Invoke MessageBoxA to trigger the detour.
-    /// - Remove the breakpoint and clean up.
+    /// Flow:
+    /// 1) Show a normal MessageBoxA (unhooked).
+    /// 2) Install HWBP via public API (VEH auto-initializes).
+    /// 3) Show a MessageBoxA to trigger the detour and parameter rewrite.
+    /// 4) Uninstall using `uninstall_hwbp`.
+    /// 5) Show a normal MessageBoxA again.
     #[test]
     fn test_messageboxa_detour_hook() {
         unsafe {
-            initialize_hwbp_runtime().expect("Failed to initialize HWBP runtime");
-
-            println!("[i] [NOT HOOKED] Showing normal MessageBoxA...");
+            // Baseline (unhooked)
             MessageBoxA(
                 0 as HWND,
                 b"This is a normal MsgBoxA call (0)\0".as_ptr(),
@@ -168,20 +97,18 @@ mod tests {
                 MB_OK,
             );
 
-            println!("[i] Installing HWBP hook on MessageBoxA...");
-            let thread_id = GetCurrentThreadId() as usize;
-            install_breakpoint(
-                thread_id,
-                MessageBoxA as usize,
-                message_box_a_detour as usize,
-                DrRegister::Dr0,
+            // Install HWBP for all threads (public API; DRx auto-selected)
+            install_hwbp(
+                MessageBoxA as *const c_void,
+                message_box_a_detour as *const c_void,
             )
-            .expect("Failed to install hardware breakpoint");
+            .expect("Failed to install HWBP hook on MessageBoxA");
 
-            println!("[+] HWBP hook installed successfully.");
+            // Optional sanity: ensure at least one registry entry exists for this TID
+            // (we don't assert DRx because selection is automatic)
+            let _cur_tid = GetCurrentThreadId() as usize;
 
             // Trigger the detour
-            println!("[i] [HOOKED] Triggering MessageBoxA...");
             MessageBoxA(
                 0 as HWND,
                 b"This won't execute\0".as_ptr(),
@@ -189,22 +116,17 @@ mod tests {
                 MB_OK,
             );
 
-            // Remove hook
-            println!("[i] Removing hook...");
-            remove_breakpoint(thread_id, DrRegister::Dr0)
-                .expect("Failed to remove hardware breakpoint");
-            println!("[+] Hook removed successfully.");
+            // Uninstall (removes from all threads where installed)
+            uninstall_hwbp(MessageBoxA as *const c_void)
+                .expect("Failed to uninstall HWBP hook for MessageBoxA");
 
-            // Normal again
-            println!("[i] [NOT HOOKED] Showing normal MessageBoxA again...");
+            // Back to normal
             MessageBoxA(
                 0 as HWND,
                 b"This is a normal MsgBoxA call (1)\0".as_ptr(),
                 b"Normal\0".as_ptr(),
                 MB_OK,
             );
-
-            uninitialize_hwbp_runtime();
         }
     }
 }

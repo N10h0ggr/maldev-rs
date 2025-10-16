@@ -1,3 +1,7 @@
-pub mod core;
-pub mod types;
-pub mod utils;
+pub mod manager;
+
+mod detour;
+pub use detour::CallArgs;
+
+mod core;
+mod utils;
