@@ -53,14 +53,12 @@ impl Veh {
     /// Returns `Err(&'static str)` if the underlying `AddVectoredExceptionHandler` fails.
     fn init(&self) -> Result<(), &'static str> {
         if self.is_initialized() {
-            trace!("VEH already initialized — skipping.");
             return Ok(());
         }
 
         // Register as first handler to ensure we see HWBP exceptions before others.
         let cookie = unsafe { AddVectoredExceptionHandler(1, Some(vector_handler)) };
         if cookie.is_null() {
-            error!("Failed to register VEH (AddVectoredExceptionHandler).");
             return Err("AddVectoredExceptionHandler failed");
         }
 
@@ -107,7 +105,6 @@ pub fn init() -> Result<(), &'static str> {
 #[unsafe(no_mangle)]
 pub unsafe extern "system" fn vector_handler(p_exc: *mut EXCEPTION_POINTERS) -> i32 {
     if p_exc.is_null() {
-        trace!("VEH called with null EXCEPTION_POINTERS — skipping.");
         return EXCEPTION_CONTINUE_SEARCH;
     }
 
@@ -117,10 +114,6 @@ pub unsafe extern "system" fn vector_handler(p_exc: *mut EXCEPTION_POINTERS) -> 
 
     // Only handle hardware single-step exceptions.
     if exception_record.ExceptionCode != EXCEPTION_SINGLE_STEP {
-        trace!(
-            "VEH ignoring non-SINGLE_STEP exception (code: 0x{:X}).",
-            exception_record.ExceptionCode
-        );
         return EXCEPTION_CONTINUE_SEARCH;
     }
 
@@ -141,45 +134,29 @@ pub unsafe extern "system" fn vector_handler(p_exc: *mut EXCEPTION_POINTERS) -> 
     };
 
     let Some(drx) = drx else {
-        trace!("VEH could not determine DRx register — passing exception on.");
         return EXCEPTION_CONTINUE_SEARCH;
     };
 
     let current_thread_id = unsafe { GetCurrentThreadId() as usize };
-    debug!(
-        "VEH triggered by thread {} on {:?} (addr: 0x{:X})",
-        current_thread_id, drx, exception_addr
-    );
 
     // Look up the hook descriptor for (TID, DRx).
     let hook_info = {
         let Ok(registry) = HOOK_REGISTRY.lock() else {
-            warn!("VEH could not lock HOOK_REGISTRY — skipping.");
             return EXCEPTION_CONTINUE_SEARCH;
         };
         match registry.active.get(&(current_thread_id, drx)) {
             Some(info) => info.clone(),
             None => {
-                trace!(
-                    "No active hook found for thread {} / {:?}",
-                    current_thread_id, drx
-                );
                 return EXCEPTION_CONTINUE_SEARCH;
             }
         }
     };
 
     // Best-effort: disable the HWBP to avoid re-entry storms.
-    if let Err(e) = clear_hardware_breakpoint(current_thread_id, drx) {
-        error!(
-            "Failed to clear HWBP for {:?} (thread {}): {:?}",
-            drx, current_thread_id, e
-        );
-    }
+    let _ = clear_hardware_breakpoint(current_thread_id, drx);
 
     // Resolve detour address into a callable function pointer.
     let Some(detour_address) = hook_info.detour_address else {
-        warn!("Hook entry for {:?} has no detour address.", drx);
         return EXCEPTION_CONTINUE_SEARCH;
     };
 
@@ -187,11 +164,6 @@ pub unsafe extern "system" fn vector_handler(p_exc: *mut EXCEPTION_POINTERS) -> 
         unsafe { core::mem::transmute::<usize, _>(detour_address) };
 
     // Invoke detour with the current thread context.
-    debug!(
-        "Invoking detour function at 0x{:X} for thread {}.",
-        detour_address, current_thread_id
-    );
-
     unsafe {
         hook_fn(context_record as *const _ as *mut _);
     }
@@ -203,14 +175,7 @@ pub unsafe extern "system" fn vector_handler(p_exc: *mut EXCEPTION_POINTERS) -> 
         hook_info.detour_address,
         hook_info.register,
     ) {
-        if let Err(e) = set_hardware_breakpoint(tid, target as _, detour as _, reg) {
-            error!(
-                "Failed to reinstall HWBP on TID {} for {:?}: {:?}",
-                tid, reg, e
-            );
-        } else {
-            trace!("Reinstalled HWBP on thread {} for {:?}", tid, reg);
-        }
+        let _ = set_hardware_breakpoint(tid, target as _, detour as _, reg);
     }
 
     EXCEPTION_CONTINUE_EXECUTION
