@@ -52,8 +52,6 @@ I plan to keep adding libraries and folders over time as new techniques, crates 
    cargo build --release
    ```
 
-4. The resulting `.rlib` or binaries will be under `target/` (for example `target/release/`).
-
 ## Contact
 
 Feel free to reach out or open an Issue for bugs or feature requests.
