@@ -4,13 +4,14 @@ maldev-rs is a collection of malware-development samples and reusable Rust libra
 
 I document code and techniques as clearly as I can. If something is unclear, check the README inside each library or the implementation, and feel free to ask.
 
-> **Warning:** These samples are potentially harmful and some are not widely tested. Do not compile or run them on production systems without proper testing and containment.
-
 ## Project overview
 
 This repo provides focused examples of low-level techniques such as process injection, direct syscalls, ETW evasion, and API hooking. Each folder contains small, self-contained examples and helper libraries that illustrate a single idea or primitive. The intention is practical reference code that’s easy to reuse or adapt for research and testing.
 
-## Repository structure
+
+> **Warning:** These samples are potentially harmful since some of them are not widely tested and can be unstable. Do not compile or execute them on production systems without testing them beforehand.
+
+### Repository structure
 
 ```
 maldev-rs/
