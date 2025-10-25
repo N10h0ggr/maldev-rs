@@ -31,6 +31,10 @@ maldev-rs/
 
 I plan to keep adding libraries and folders over time as new techniques, crates and approaches appear, so expect this structure to expand.
 
+Got it — here’s a short, clean, and straightforward **Usage** section focused only on how to link and use the libraries properly (no static linkage, no `.rlib` complexity):
+
+---
+
 ## Usage
 
 1. Clone the repository:
@@ -38,19 +42,39 @@ I plan to keep adding libraries and folders over time as new techniques, crates 
    ```bash
    git clone https://github.com/N10h0ggr/maldev-rs.git
    cd maldev-rs
-    ```
+   ```
 
-2. Pick a sample or library, for example:
+2. Pick a sample or library to build, for example:
 
    ```bash
    cd evasion/etw
+   cargo build --release
    ```
 
-3. Build with Cargo:
+3. To use any of the libraries in your own project, link them as a **path dependency** in your `Cargo.toml`.
+   Example:
+
+   ```toml
+   [dependencies]
+   hashing = { path = "../utils/hashing" }
+   winapi_utils = { path = "../utils/winapi" }
+   ```
+
+   Then import and use them normally in your code:
+
+   ```rust
+   use hashing::hash_function;
+   use winapi_utils::get_process_handle;
+   ```
+
+4. Build your project as usual:
 
    ```bash
    cargo build --release
    ```
+
+This way Cargo handles compilation, linking, and dependency management automatically, while keeping IDE features like autocompletion and inline documentation fully functional.
+
 
 ## Contact
 
