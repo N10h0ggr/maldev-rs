@@ -1,8 +1,8 @@
 use windows;
 use std::ffi::c_void;
 use std::{ptr};
-use utils::{get_export_directory};
-use utils::hash::{compute_crc32_hash};
+use hashing::{get_export_directory};
+use hashing::hash::{compute_crc32_hash};
 use windows::Win32::Foundation::HMODULE;
 use windows::Win32::System::Threading::PEB;
 use windows::Win32::System::WindowsProgramming::LDR_DATA_TABLE_ENTRY;
@@ -59,7 +59,7 @@ static mut SYSCALL_CACHE: Vec<NtSyscall> = Vec::new();
 
 unsafe fn init_ntdll_config_structure() -> Result<NtdllConfig, &'static str> {
     // Getting PEB
-    let p_peb: *mut PEB = utils::get_peb();
+    let p_peb: *mut PEB = hashing::get_peb();
     if p_peb.is_null() { // || (*p_peb).OSMajorVersion != 0xA
         return Err("init_ntdll_config_structure: PEB is null");
     }
@@ -235,8 +235,8 @@ unsafe fn search_syscall_in_cache(hash: u32) -> Option<NtSyscall> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hooking;
-    use hooking::{Hook, install_hook, remove_hook};
+    use trampoline;
+    use trampoline::{Hook, install_hook, remove_hook};
 
     #[test]
     fn test_fetch_nt_syscall() {

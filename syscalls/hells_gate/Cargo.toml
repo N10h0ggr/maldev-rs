@@ -1,5 +1,5 @@
 [package]
-name = "syscalls"
+name = "hells_gate"
 version = "0.1.0"
 edition = "2021"
 
@@ -11,5 +11,5 @@ default-features = true
 features = ["Win32_System_Threading", "Win32_System_Kernel"]
 
 [dependencies]
-utils = { path = "../utils"}
-trampoline = { path = "../hooking/trampoline"}
+hashing = { path = "../../utils/hashing" }
+trampoline = { path = "../../hooking/trampoline" }

@@ -5,4 +5,4 @@ edition = "2024"
 
 [dependencies]
 windows-sys.workspace = true
-utils = {path = "../utils"}
+hashing = { path = "../hashing" }

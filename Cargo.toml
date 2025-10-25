@@ -2,10 +2,10 @@
 members = [
   "hooking/trampoline",
   "hooking/hwbp",
-  "injections",
-  "syscalls",
-  "utils",
-  "winapi",
+  "injections/apc",
+  "syscalls/hells_gate",
+  "utils/hashing",
+  "utils/winapi",
   "evasion/etw",
 ]
 resolver = "3"

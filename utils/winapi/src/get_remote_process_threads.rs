@@ -12,7 +12,7 @@ use windows_sys::s;
 
 use crate::structs::SystemProcessInformation;
 
-use utils::unicode_string_to_string;
+use hashing::unicode_string_to_string;
 
 /// Retrieves the process ID (PID) and main thread ID (TID) for the specified process name.
 ///

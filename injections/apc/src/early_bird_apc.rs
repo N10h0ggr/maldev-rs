@@ -5,8 +5,6 @@ use windows::Win32::System::Diagnostics::Debug::{DebugActiveProcessStop, WritePr
 use windows::Win32::System::Memory::{MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READWRITE, PAGE_PROTECTION_FLAGS, PAGE_READWRITE, VirtualAllocEx, VirtualProtectEx};
 use windows::core::{PSTR};
 
-// msfvenom -p windows/x64/exec CMD=calc.exe -f rust
-
 /// Injects and executes shellcode in a target process using the Early Bird APC injection technique.
 ///
 /// This function performs the following steps:

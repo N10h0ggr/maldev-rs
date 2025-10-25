@@ -5,8 +5,8 @@ mod integration_tests {
     use windows::Win32::Foundation::{FALSE, HANDLE};
     use windows::Win32::System::Kernel::NULL64;
     use windows::Win32::System::Memory::{MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READ, PAGE_READWRITE};
-    use syscalls::{prepare_syscall, run_direct_syscall};
     use windows::Win32::System::Threading::{GetThreadId, THREAD_ALL_ACCESS};
+    use hells_gate::{prepare_syscall, run_direct_syscall};
 
     const NT_ALLOCATE_VIRTUAL_MEMORY_CRC32: u32 = 0xe77460e0;
     const NT_PROTECT_VIRTUAL_MEMORY_CRC32: u32 = 0x5e84b28c;
