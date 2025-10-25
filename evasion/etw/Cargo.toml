@@ -1,0 +1,15 @@
+[package]
+name = "etw"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+windows-sys = { version = "0.61", features = ["Win32_System_Diagnostics_Etw"] }
+anyhow = "1.0"
+thiserror = "2.0.17"
+clap = { version = "4.0", features = ["derive"] }
+log = "0.4"
+env_logger = "0.11.8"
+
+[profile.dev]
+opt-level = 0
