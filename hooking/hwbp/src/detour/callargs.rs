@@ -1,6 +1,10 @@
 use core::{marker::PhantomData, mem, ptr};
 use windows_sys::Win32::System::Diagnostics::Debug::CONTEXT;
 
+#[unsafe(link_section = ".text")]
+#[used] // ensure the linker keeps it
+static UC_RET: [u8; 1] = [0xC3]; // x64/x86: RET byte
+
 /// Safe and ergonomic wrapper around a raw Windows thread [`CONTEXT`] pointer,
 /// focused on reading and modifying **function call arguments** when handling
 /// hardware breakpoints (e.g., inside a vectored exception handler).
@@ -49,7 +53,10 @@ impl<'a> CallArgs<'a> {
     /// # Safety
     /// - `ctx` must point to a valid thread context owned by the current thread.
     pub unsafe fn new(ctx: *mut CONTEXT) -> Self {
-        Self { ctx, _lt: PhantomData }
+        Self {
+            ctx,
+            _lt: PhantomData,
+        }
     }
 
     /// Returns the underlying raw [`CONTEXT`] pointer.
@@ -165,7 +172,7 @@ impl<'a> CallArgs<'a> {
     /// # Safety
     /// - `self.ctx` must be valid and mutable.
     pub unsafe fn set_return_ptr<T>(&mut self, ptr_val: *mut T) {
-        self.set_return_usize(ptr_val as usize);
+        unsafe { self.set_return_usize(ptr_val as usize) };
     }
 
     /// Set floating-point return value (f64) in XMM0.
@@ -183,7 +190,7 @@ impl<'a> CallArgs<'a> {
         let bits = v.to_bits();
         let src_ptr = &bits as *const u64 as *const u8;
         // Safety: assume Xmm0 exists and is at least 16 bytes.
-        let dst_ptr = &mut c.Anonymous.Anonymous.Xmm0 as *mut _ as *mut u8;
+        let dst_ptr = unsafe { &mut c.Anonymous.Anonymous.Xmm0 as *mut _ as *mut u8 };
         // Zero the 16 bytes first
         for i in 0..16usize {
             unsafe { ptr::write(dst_ptr.add(i), 0) };
@@ -202,6 +209,16 @@ impl<'a> CallArgs<'a> {
     pub unsafe fn set_rip(&mut self, addr: usize) {
         let c = unsafe { &mut *self.ctx };
         c.Rip = addr as u64;
+    }
+
+    /// Used in the detour function to block the execution of the original function.
+    /// Set the instruction pointer (RIP) to a trampoline in `.text` section.
+    ///
+    /// # Safety
+    /// - `self.ctx` must be valid and mutable.
+    pub unsafe fn block_real_execution(&mut self) {
+        let c = unsafe { &mut *self.ctx };
+        c.Rip = UC_RET.as_ptr() as u64;
     }
 }
 

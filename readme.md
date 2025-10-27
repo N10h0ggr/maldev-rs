@@ -16,7 +16,8 @@ This repo provides focused examples of low-level techniques such as process inje
 ```
 maldev-rs/
 ├── evasion/
-│   └── etw/           # Event Tracing for Windows (ETW) hijacking / evasion techniques
+│   ├── amsi/          # Antimalware Scanning Interface (AMSI) patching with HWBP
+│   └── etw/           # Event Tracing for Windows (ETW) hijacking 
 ├── hooking/
 │   ├── hwbp/          # Hardware Breakpoints implementation and detour helpers
 │   └── trampoline/    # Assembly-level function patching to redirect execution flow
