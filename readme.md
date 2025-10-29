@@ -15,6 +15,8 @@ This repo provides focused examples of low-level techniques such as process inje
 
 ```
 maldev-rs/
+├── anti-analysis/
+│   └── drm/           # Self-patching, machine-locked DRM implementation
 ├── evasion/
 │   ├── amsi/          # Antimalware Scanning Interface (AMSI) patching with HWBP
 │   └── etw/           # Event Tracing for Windows (ETW) hijacking 
@@ -28,6 +30,7 @@ maldev-rs/
 └── utils/
     ├── hashing/       # Custom hashing implementations for obfuscation
     └── winapi/        # Custom Windows structures and utility functions
+
 ```
 
 I plan to keep adding libraries and folders over time as new techniques, crates and approaches appear, so expect this structure to expand.
