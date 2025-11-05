@@ -19,18 +19,16 @@ maldev-rs/
 │   └── drm/           # Self-patching, machine-locked DRM implementation
 ├── evasion/
 │   ├── amsi/          # Antimalware Scanning Interface (AMSI) patching with HWBP
-│   └── etw/           # Event Tracing for Windows (ETW) hijacking 
+│   ├── etw/           # Event Tracing for Windows (ETW) hijacking 
+│   └──	syscalls/      # Direct and indirect syscall invocation techniques 
 ├── hooking/
 │   ├── hwbp/          # Hardware Breakpoints implementation and detour helpers
 │   └── trampoline/    # Assembly-level function patching to redirect execution flow
 ├── injections/
 │   └── apc/           # Early Bird APC injection using debug permissions
-├── syscalls/
-│   └── hells_gate/    # Direct syscall invocation techniques (Hell's Gate style)
 └── utils/
     ├── hashing/       # Custom hashing implementations for obfuscation
     └── winapi/        # Custom Windows structures and utility functions
-
 ```
 
 I plan to keep adding libraries and folders over time as new techniques, crates and approaches appear, so expect this structure to expand.

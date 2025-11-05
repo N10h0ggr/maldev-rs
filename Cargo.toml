@@ -3,11 +3,11 @@ members = [
   "hooking/trampoline",
   "hooking/hwbp",
   "injections/apc",
-  "syscalls/hells_gate",
   "utils/hashing",
   "utils/winapi",
   "evasion/etw",
   "evasion/amsi",
+  "evasion/syscalls",
   "anti-analysis/drm",
 ]
 resolver = "3"
