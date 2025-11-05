@@ -1,5 +1,3 @@
-// integration_tests.rs (or append to tests.rs)
-//
 #[cfg(test)]
 mod integration_tests {
     use hashing::hash::compute_crc32_hash;
@@ -49,9 +47,8 @@ mod integration_tests {
     #[test]
     fn test_direct_syscall_runtime_hashes() {
         // NOTE: Do NOT hardcode syscall names or CRC32 hash constants in production binaries.
-        // Resolving syscall names at runtime (or embedding a secure resolution mechanism)
-        // reduces the risk of mismatches across Windows versions and avoids leaking static
-        // markers in the final artifact.
+        // Resolving syscall names at runtime reduces the risk of mismatches across Windows versions 
+        // and avoids leaking static markers in the final artifact.
         let target_names = [
             "NtAllocateVirtualMemory",
             "NtProtectVirtualMemory",
@@ -66,7 +63,7 @@ mod integration_tests {
         let old_protection: u32 = 0;
 
         unsafe {
-            // allocate memory (runtime resolved hash)
+            // allocate memory
             prepare_direct_syscall(*hashes.get("NtAllocateVirtualMemory").expect("hash missing"));
             let status: usize = run_direct_syscall(
                 -1isize,
