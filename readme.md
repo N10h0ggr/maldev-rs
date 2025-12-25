@@ -16,19 +16,22 @@ This repo provides focused examples of low-level techniques such as process inje
 ```
 maldev-rs/
 ├── anti-analysis/
-│   └── drm/           # Self-patching, machine-locked DRM implementation
+│   └── drm/              # Self-patching, machine-locked DRM implementation
 ├── evasion/
-│   ├── amsi/          # Antimalware Scanning Interface (AMSI) patching with HWBP
-│   ├── etw/           # Event Tracing for Windows (ETW) hijacking 
-│   └──	syscalls/      # Direct and indirect syscall invocation techniques 
+│   ├── amsi/             # Antimalware Scanning Interface (AMSI) patching with HWBP
+│   ├── etw/              # Event Tracing for Windows (ETW) hijacking 
+│   └──	syscalls/        # Direct and indirect syscall invocation techniques 
 ├── hooking/
-│   ├── hwbp/          # Hardware Breakpoints implementation and detour helpers
-│   └── trampoline/    # Assembly-level function patching to redirect execution flow
+│   ├── hwbp/             # Hardware Breakpoints implementation and detour helpers
+│   └── trampoline/       # Assembly-level function patching to redirect execution flow
 ├── injections/
-│   └── apc/           # Early Bird APC injection using debug permissions
+│   └── apc/              # Early Bird APC injection using debug permissions
+├── loaders/
+│   └── pe/               
+│       └── manual_map/   # Mapping and executing PE into local process
 └── utils/
-    ├── hashing/       # Custom hashing implementations for obfuscation
-    └── winapi/        # Custom Windows structures and utility functions
+    ├── hashing/          # Custom hashing implementations for obfuscation
+    └── winapi/           # Custom Windows structures and utility functions
 ```
 
 I plan to keep adding libraries and folders over time as new techniques, crates and approaches appear, so expect this structure to expand.
