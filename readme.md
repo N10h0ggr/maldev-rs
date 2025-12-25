@@ -27,8 +27,7 @@ maldev-rs/
 ├── injections/
 │   └── apc/              # Early Bird APC injection using debug permissions
 ├── loaders/
-│   └── pe/               
-│       └── manual_map/   # Mapping and executing PE into local process
+│   └── pe_mapper/        # Mapping and executing a PE into local process
 └── utils/
     ├── hashing/          # Custom hashing implementations for obfuscation
     └── winapi/           # Custom Windows structures and utility functions
