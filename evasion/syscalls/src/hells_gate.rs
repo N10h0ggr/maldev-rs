@@ -179,8 +179,7 @@ pub unsafe fn fetch_nt_syscall(dw_sys_hash: u32) -> Result<NtSyscall, &'static s
                     nt_sys.dw_ssn = ssn;
                 }
             }
-
-            // Locate the actual syscall instruction (0x0F 0x05)
+            
             if !nt_sys.p_syscall_address.is_null() {
                 let u_func_address = (nt_sys.p_syscall_address as *const u8).add(0xFF);
                 for offset in 0..RANGE as usize {

@@ -9,6 +9,7 @@ members = [
   "evasion/amsi",
   "evasion/syscalls",
   "anti-analysis/drm",
+  "loaders/pe/manual_map",
 ]
 resolver = "3"
 
