@@ -1,0 +1,12 @@
+[build]
+target = "x86_64-pc-windows-msvc"
+
+[unstable]
+build-std = ["core", "alloc"]
+build-std-features = ["compiler-builtins-mem"]
+
+[target.x86_64-pc-windows-msvc]
+rustflags = [
+    "-C", "link-arg=/ENTRY:DllMain",
+    "-C", "panic=abort",
+]

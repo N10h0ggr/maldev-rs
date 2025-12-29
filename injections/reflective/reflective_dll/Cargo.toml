@@ -1,0 +1,14 @@
+[package]
+name = "reflective_dll"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+windows-sys.workspace = true
+api_hashing = { path = "../../../utils/api_hashing"}
+
+[profile.release]
+panic = "abort"
