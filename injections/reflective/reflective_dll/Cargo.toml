@@ -8,7 +8,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 windows-sys.workspace = true
-api_hashing = { path = "../../../utils/api_hashing"}
+api_hasher = { path = "../../../utils/api_hasher", features = ["hash-crc32"]}
 
 [profile.release]
 panic = "abort"

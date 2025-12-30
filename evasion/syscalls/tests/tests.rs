@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod integration_tests {
-    use hashing::hash::compute_crc32_hash;
+    use api_hasher::crc32_runtime;
     use std::{collections::HashMap, mem, ptr};
     use syscalls::{
         prepare_direct_syscall, prepare_indirect_syscall, run_direct_syscall, run_indirect_syscall,
@@ -38,7 +38,7 @@ mod integration_tests {
     fn resolve_hashes_for(names: &[&str]) -> HashMap<String, u32> {
         let mut map = HashMap::new();
         for &name in names {
-            let hash = compute_crc32_hash(name.as_bytes());
+            let hash = crc32_runtime(name);
             map.insert(name.to_string(), hash);
         }
         map

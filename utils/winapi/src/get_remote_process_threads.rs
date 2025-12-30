@@ -2,8 +2,9 @@
 //! This avoids the Toolhelp API layer but depends on undocumented Windows structures.
 //! Use with caution: structure layouts may change, and user-mode hooks can still apply.
 
+use std::slice;
 use windows_sys::Wdk::System::SystemInformation::SYSTEM_INFORMATION_CLASS;
-use windows_sys::Win32::Foundation::GetLastError;
+use windows_sys::Win32::Foundation::{GetLastError, UNICODE_STRING};
 use windows_sys::Win32::Foundation::STATUS_INFO_LENGTH_MISMATCH;
 use windows_sys::Win32::Foundation::STATUS_SUCCESS;
 use windows_sys::Win32::System::LibraryLoader::GetModuleHandleA;
@@ -12,7 +13,15 @@ use windows_sys::s;
 
 use crate::structs::SystemProcessInformation;
 
-use hashing::unicode_string_to_string;
+#[inline]
+unsafe fn unicode_string_to_string(u: &UNICODE_STRING) -> String {
+    if u.Buffer.is_null() || u.Length == 0 {
+        return String::new();
+    }
+    let len_u16 = (u.Length as usize) / 2;
+    let wide = unsafe { slice::from_raw_parts(u.Buffer, len_u16) };
+    String::from_utf16_lossy(wide)
+}
 
 /// Retrieves the process ID (PID) and main thread ID (TID) for the specified process name.
 ///

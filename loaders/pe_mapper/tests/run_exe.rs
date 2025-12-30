@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-use nitinol::run;
+use pe_mapper::run;
 
 /// Returns the path to the test executable matching the host architecture.
 ///

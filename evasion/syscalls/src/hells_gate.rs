@@ -1,11 +1,14 @@
-use hashing::get_export_directory;
-use hashing::hash::compute_crc32_hash;
+use std::arch::asm;
 use std::ffi::c_void;
 use std::ptr;
 use windows;
 use windows::Win32::Foundation::HMODULE;
+use windows::Win32::System::Diagnostics::Debug::{IMAGE_NT_HEADERS64};
+use windows::Win32::System::SystemServices::{IMAGE_DOS_HEADER, IMAGE_EXPORT_DIRECTORY};
 use windows::Win32::System::Threading::PEB;
 use windows::Win32::System::WindowsProgramming::LDR_DATA_TABLE_ENTRY;
+
+use crate::crc32_hash::crc32_runtime;
 
 const UP: isize = -32;
 const DOWN: isize = 32;
@@ -38,6 +41,71 @@ pub struct NtSyscall {
 }
 static mut SYSCALL_CACHE: Vec<NtSyscall> = Vec::new();
 
+/// Returns a pointer to the current thread's TEB.
+///
+/// # Safety
+/// Reads the architecture-specific segment register and returns a raw pointer.
+/// Must be called from a Windows thread where the TEB layout matches `windows-sys`.
+#[cfg(target_arch = "x86")]
+pub unsafe fn get_teb() -> *mut TEB {
+    let teb: *mut TEB;
+    asm!("mov {teb}, fs:[0x18]", teb = out(reg) teb);
+    teb
+}
+
+/// Returns a pointer to the current thread's TEB.
+///
+/// # Safety
+/// Reads the architecture-specific segment register and returns a raw pointer.
+/// Must be called from a Windows thread where the TEB layout matches `windows-sys`.
+#[cfg(target_arch = "x86_64")]
+pub unsafe fn get_teb() -> *mut windows::Win32::System::Threading::TEB {
+    let teb: *mut windows::Win32::System::Threading::TEB;
+    asm!("mov {teb}, gs:[0x30]", teb = out(reg) teb);
+    teb
+}
+
+/// Retrieves a pointer to the Export Directory of a given module.
+///
+/// This function parses the PE headers starting from the DOS Header to find the
+/// Export Directory in the Optional Header's Data Directory.
+///
+/// # Arguments
+/// * `h_module` - The base address (handle) of the module.
+///
+/// # Returns
+/// * `Option<*const IMAGE_EXPORT_DIRECTORY>` - Pointer to the export directory if found.
+unsafe fn get_export_directory(h_module: HMODULE) -> Option<*const IMAGE_EXPORT_DIRECTORY> {
+    let base_addr = h_module.0 as usize;
+
+    // Get DOS Header
+    let p_dos_header = base_addr as *const IMAGE_DOS_HEADER;
+    if (*p_dos_header).e_magic != 0x5A4D { // "MZ"
+        return None;
+    }
+
+    // Get NT Headers (DOS Header + e_lfanew)
+    let p_nt_headers = (base_addr + (*p_dos_header).e_lfanew as usize) as *const IMAGE_NT_HEADERS64;
+    if (*p_nt_headers).Signature != 0x00004550 { // "PE\0\0"
+        return None;
+    }
+
+    // Get Export Directory Entry from Data Directory
+    // Index 0 is always the Export Directory
+    let export_entry = (*p_nt_headers).OptionalHeader.DataDirectory[0];
+
+    if export_entry.VirtualAddress == 0 {
+        return None;
+    }
+
+    // Calculate absolute address (Base + RVA)
+    let p_export_dir = (base_addr + export_entry.VirtualAddress as usize) as *const IMAGE_EXPORT_DIRECTORY;
+
+    Some(p_export_dir)
+}
+
+
+
 /// Initializes the `NtdllConfig` structure with data from the ntdll.dll module.
 ///
 /// This function retrieves the Process Environment Block (PEB) and uses it to find the
@@ -60,7 +128,8 @@ static mut SYSCALL_CACHE: Vec<NtSyscall> = Vec::new();
 
 unsafe fn init_ntdll_config_structure() -> Result<NtdllConfig, &'static str> {
     // Getting PEB
-    let p_peb: *mut PEB = hashing::get_peb();
+    let teb = get_teb();
+    let p_peb: *mut PEB = (*teb).ProcessEnvironmentBlock;
     if p_peb.is_null() {
         // || (*p_peb).OSMajorVersion != 0xA
         return Err("init_ntdll_config_structure: PEB is null");
@@ -160,7 +229,7 @@ pub unsafe fn fetch_nt_syscall(dw_sys_hash: u32) -> Result<NtSyscall, &'static s
             Err(_) => continue,
         };
 
-        if compute_crc32_hash(func_name.as_ref()) == dw_sys_hash {
+        if crc32_runtime(func_name.as_ref()) == dw_sys_hash {
             nt_sys.p_syscall_address = func_address as *mut c_void;
 
             // Direct syscall bytes
@@ -303,7 +372,7 @@ mod tests {
                 let func_name_ptr = module_base.add(name_rva as usize) as *const i8;
                 if let Ok(func_name) = CStr::from_ptr(func_name_ptr).to_str() {
                     if TARGET_NAMES.contains(&func_name) {
-                        let hash = compute_crc32_hash(func_name.as_ref());
+                        let hash = crc32_runtime(func_name.as_ref());
                         println!("{:<28} => 0x{:08x}", func_name, hash);
                     }
                 }

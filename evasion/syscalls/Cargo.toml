@@ -6,8 +6,8 @@ edition = "2021"
 [dependencies.windows]
 version = "0.57.0"
 default-features = true
-features = ["Win32_System_Threading", "Win32_System_Kernel"]
+features = ["Win32_System_Threading", "Win32_System_Kernel", "Win32_System_WindowsProgramming", "Win32_System_SystemServices", "Win32_System_Diagnostics", "Win32_System_Diagnostics_Debug", "Win32_System_SystemInformation"]
 
 [dependencies]
-hashing = { path = "../../utils/hashing" }
+api_hasher = { path = "../../utils/api_hasher" }
 trampoline = { path = "../../hooking/trampoline" }

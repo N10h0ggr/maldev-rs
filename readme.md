@@ -20,16 +20,17 @@ maldev-rs/
 ├── evasion/
 │   ├── amsi/             # Antimalware Scanning Interface (AMSI) patching with HWBP
 │   ├── etw/              # Event Tracing for Windows (ETW) hijacking 
-│   └──	syscalls/        # Direct and indirect syscall invocation techniques 
+│   └── syscalls/         # Direct and indirect syscall invocation techniques 
 ├── hooking/
 │   ├── hwbp/             # Hardware Breakpoints implementation and detour helpers
 │   └── trampoline/       # Assembly-level function patching to redirect execution flow
 ├── injections/
-│   └── apc/              # Early Bird APC injection using debug permissions
+│   ├── apc/              # Early Bird APC injection using debug permissions
+│   └── reflective/       # Reflective DLL injection using CreateRemoteThread
 ├── loaders/
 │   └── pe_mapper/        # Mapping and executing a PE into local process
 └── utils/
-    ├── hashing/          # Custom hashing implementations for obfuscation
+    ├── api-hasher/       # A no_std api hashing implementation 
     └── winapi/           # Custom Windows structures and utility functions
 ```
 
@@ -56,7 +57,7 @@ I plan to keep adding libraries and folders over time as new techniques, crates 
 
    ```toml
    [dependencies]
-   hashing = { path = "../utils/hashing" }
+   api-hasher = { path = "../utils/api-hasher" }
    winapi_utils = { path = "../utils/winapi" }
    ```
 

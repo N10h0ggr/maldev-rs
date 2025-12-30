@@ -8,8 +8,9 @@
 
 use std::mem;
 use std::slice;
-use windows_sys::Win32::System::Diagnostics::Debug::{IMAGE_NT_HEADERS64, IMAGE_SECTION_HEADER};
-use windows_sys::Win32::System::SystemServices::{IMAGE_DOS_HEADER, IMAGE_NT_SIGNATURE};
+use windows_sys::Win32::Foundation::HMODULE;
+use windows_sys::Win32::System::Diagnostics::Debug::{IMAGE_DIRECTORY_ENTRY_EXPORT, IMAGE_NT_HEADERS64, IMAGE_SECTION_HEADER};
+use windows_sys::Win32::System::SystemServices::{IMAGE_DOS_HEADER, IMAGE_EXPORT_DIRECTORY, IMAGE_NT_SIGNATURE};
 
 /// Reads and validates the DOS header from a PE image buffer.
 ///
@@ -114,4 +115,43 @@ pub fn list_sections<'a>(
         )
     };
     Ok(sections)
+}
+
+/// Retrieves a pointer to the Export Directory of a given module.
+///
+/// This function parses the PE headers starting from the DOS Header to find the 
+/// Export Directory in the Optional Header's Data Directory.
+///
+/// # Arguments
+/// * `h_module` - The base address (handle) of the module.
+///
+/// # Returns
+/// * `Option<*const IMAGE_EXPORT_DIRECTORY>` - Pointer to the export directory if found.
+unsafe fn get_export_directory(h_module: HMODULE) -> Option<*const IMAGE_EXPORT_DIRECTORY> {
+    let base_addr = h_module as usize;
+
+    // Get DOS Header
+    let p_dos_header = base_addr as *const IMAGE_DOS_HEADER;
+    if (*p_dos_header).e_magic != 0x5A4D { // "MZ"
+        return None;
+    }
+
+    // Get NT Headers (DOS Header + e_lfanew)
+    let p_nt_headers = (base_addr + (*p_dos_header).e_lfanew as usize) as *const IMAGE_NT_HEADERS64;
+    if (*p_nt_headers).Signature != 0x00004550 { // "PE\0\0"
+        return None;
+    }
+
+    // Get Export Directory Entry from Data Directory
+    // Index 0 is always the Export Directory
+    let export_entry = (*p_nt_headers).OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT as usize];
+
+    if export_entry.VirtualAddress == 0 {
+        return None;
+    }
+
+    // Calculate absolute address (Base + RVA)
+    let p_export_dir = (base_addr + export_entry.VirtualAddress as usize) as *const IMAGE_EXPORT_DIRECTORY;
+
+    Some(p_export_dir)
 }

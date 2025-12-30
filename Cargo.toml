@@ -3,13 +3,15 @@ members = [
   "hooking/trampoline",
   "hooking/hwbp",
   "injections/apc",
-  "utils/hashing",
   "utils/winapi",
   "evasion/etw",
   "evasion/amsi",
   "evasion/syscalls",
   "anti-analysis/drm",
-  "loaders/pe_mapper",
+  "loaders/pe_mapper", 
+  "injections/reflective/injector",
+  "injections/reflective/reflective_dll",
+  "utils/api_hasher",
 ]
 resolver = "3"
 
@@ -31,5 +33,6 @@ windows-sys = { version = "0.61.2", features = [
   "Win32_UI_WindowsAndMessaging",
   "Wdk_System_SystemInformation",
   "Win32_System_Antimalware",
+  "Win32_System_Diagnostics_ToolHelp",
 ] }
 log = "0.4.28"

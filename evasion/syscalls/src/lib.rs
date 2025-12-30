@@ -1,9 +1,12 @@
+#![feature(global_asm)]
 mod asm;
 pub use asm::run_direct_syscall;
 pub use asm::run_indirect_syscall;
 use asm::{set_ssn_direct, set_ssn_indirect};
 
 pub mod hells_gate;
+mod crc32_hash;
+
 use hells_gate::fetch_nt_syscall;
 
 /// Prepares a system call by fetching the NT syscall using the provided hash.

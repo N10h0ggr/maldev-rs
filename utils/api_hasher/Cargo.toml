@@ -1,0 +1,19 @@
+[package]
+name = "api_hasher"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+# Default: std + a sane hash algorithm
+default = ["hash-djb2"]
+
+# Enable std-dependent functionality (Error trait, tests, etc.)
+std = []
+
+# Hash algorithms (mutually exclusive by convention)
+hash-djb2 = []
+hash-fnv1a = []
+hash-crc32 = []
+hash-custom = []
+
+[dependencies]
