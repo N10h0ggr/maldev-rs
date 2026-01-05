@@ -16,22 +16,23 @@ This repo provides focused examples of low-level techniques such as process inje
 ```
 maldev-rs/
 ├── anti-analysis/
-│   └── drm/              # Self-patching, machine-locked DRM implementation
+│   └── drm/               # Self-patching, machine-locked DRM implementation
 ├── evasion/
-│   ├── amsi/             # Antimalware Scanning Interface (AMSI) patching with HWBP
-│   ├── etw/              # Event Tracing for Windows (ETW) hijacking 
-│   └── syscalls/         # Direct and indirect syscall invocation techniques 
+│   ├── amsi/              # Antimalware Scanning Interface (AMSI) patching with HWBP
+│   ├── etw/               # Event Tracing for Windows (ETW) hijacking 
+│   └── syscalls/          # Direct and indirect syscall invocation techniques 
 ├── hooking/
-│   ├── hwbp/             # Hardware Breakpoints implementation and detour helpers
-│   └── trampoline/       # Assembly-level function patching to redirect execution flow
+│   ├── hwbp/              # Hardware Breakpoints implementation and detour helpers
+│   └── trampoline/        # Assembly-level function patching to redirect execution flow
 ├── injections/
-│   ├── apc/              # Early Bird APC injection using debug permissions
-│   └── reflective/       # Reflective DLL injection using CreateRemoteThread
+│   ├── apc/               # Early Bird APC injection using debug permissions
+│   └── reflective/        # Reflective DLL injection using CreateRemoteThread
 ├── loaders/
-│   └── pe_mapper/        # Mapping and executing a PE into local process
+│   ├── pe_fluctuation/    # In-Memory local PE encryption/decryption
+│   └── pe_mapper/         # Mapping and executing a PE into local process
 └── utils/
-    ├── api-hasher/       # A no_std api hashing implementation 
-    └── winapi/           # Custom Windows structures and utility functions
+    ├── api-hasher/        # A no_std api hashing implementation 
+    └── winapi/            # Custom Windows structures and utility functions
 ```
 
 I plan to keep adding libraries and folders over time as new techniques, crates and approaches appear, so expect this structure to expand.

@@ -12,6 +12,7 @@ members = [
   "injections/reflective/injector",
   "injections/reflective/reflective_dll",
   "utils/api_hasher",
+  "loaders/pe_fluctuation",
 ]
 resolver = "3"
 
