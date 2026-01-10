@@ -1,16 +1,17 @@
 #[cfg(test)]
 mod integration_tests {
-    use api_hasher::crc32_runtime;
     use std::{collections::HashMap, mem, ptr};
+    use std::ptr::null_mut;
     use syscalls::{
         prepare_direct_syscall, prepare_indirect_syscall, run_direct_syscall, run_indirect_syscall,
+        compute_crc32_hash
     };
-    use windows::Win32::Foundation::{FALSE, HANDLE};
-    use windows::Win32::System::Kernel::NULL64;
-    use windows::Win32::System::Memory::{
+    use windows_sys::Win32::Foundation::{FALSE, HANDLE};
+    use windows_sys::Win32::System::Kernel::NULL64;
+    use windows_sys::Win32::System::Memory::{
         MEM_COMMIT, MEM_RESERVE, PAGE_EXECUTE_READ, PAGE_READWRITE,
     };
-    use windows::Win32::System::Threading::{GetThreadId, THREAD_ALL_ACCESS};
+    use windows_sys::Win32::System::Threading::{GetThreadId, THREAD_ALL_ACCESS};
 
     // calc.exe
     const PAYLOAD: [u8; 272] = [
@@ -38,7 +39,7 @@ mod integration_tests {
     fn resolve_hashes_for(names: &[&str]) -> HashMap<String, u32> {
         let mut map = HashMap::new();
         for &name in names {
-            let hash = crc32_runtime(name);
+            let hash = compute_crc32_hash(name);
             map.insert(name.to_string(), hash);
         }
         map
@@ -103,10 +104,10 @@ mod integration_tests {
 
             // create thread
             prepare_direct_syscall(*hashes.get("NtCreateThreadEx").expect("hash missing"));
-            let mut h_thread: HANDLE = HANDLE::default();
+            let mut h_thread: HANDLE = null_mut();
             let status: usize = run_direct_syscall(
                 &mut h_thread,
-                THREAD_ALL_ACCESS.0 as usize,
+                THREAD_ALL_ACCESS as usize,
                 NULL64,
                 -1isize,
                 p_address,
@@ -197,10 +198,10 @@ mod integration_tests {
 
             // create thread
             prepare_indirect_syscall(*hashes.get("NtCreateThreadEx").expect("hash missing"));
-            let mut h_thread: HANDLE = HANDLE::default();
+            let mut h_thread: HANDLE = null_mut();
             let status: usize = run_indirect_syscall(
                 &mut h_thread,
-                THREAD_ALL_ACCESS.0 as usize,
+                THREAD_ALL_ACCESS as usize,
                 NULL64,
                 -1isize,
                 p_address,

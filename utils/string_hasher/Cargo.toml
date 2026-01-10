@@ -1,0 +1,10 @@
+[package]
+name = "string_hasher"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+
+[dev-dependencies]
+# Only used for "cargo test"
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation"] }

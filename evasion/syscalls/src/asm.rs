@@ -1,4 +1,4 @@
-use std::arch::global_asm;
+use core::arch::global_asm;
 
 #[cfg(target_arch = "x86_64")]
 global_asm!(
@@ -57,12 +57,10 @@ global_asm!(
     "    ret"
 );
 
-extern "C" {
-    // original direct syscall functions
+unsafe extern "C" {
     pub fn set_ssn_direct(ssn: usize);
     pub fn run_direct_syscall(...) -> usize;
 
-    // new indirect syscall versions
     pub fn set_ssn_indirect(ssn: usize, syscall_inst_addr: usize);
     pub fn run_indirect_syscall(...) -> usize;
 }
