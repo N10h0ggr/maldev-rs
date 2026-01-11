@@ -2,65 +2,40 @@ use core::arch::asm;
 use crate::error::ResolveError;
 use crate::algorithms::get_default_hash;
 
-pub fn find_symbol(dll_name: &[u8], func_hash: u32) -> Result<*const (), ResolveError> {
-    let module_base = get_module_base(dll_name)?;
+pub fn resolve_symbol(dll_hash: u32, func_hash: u32) -> Result<*const (), ResolveError> {
+    let module_base = get_module_base_by_hash(dll_hash)?;
     search_export_table(module_base, func_hash)
 }
 
-fn get_module_base(dll_name: &[u8]) -> Result<*const u8, ResolveError> {
+fn get_module_base_by_hash(dll_hash: u32) -> Result<*const u8, ResolveError> {
     unsafe {
         let peb: *const u8;
+        #[cfg(target_arch = "x86_64")]
+        asm!("mov {}, gs:[0x60]", out(reg) peb);
+        #[cfg(target_arch = "x86")]
+        asm!("mov {}, fs:[0x30]", out(reg) peb);
 
         #[cfg(target_arch = "x86_64")]
-        {
-            asm!("mov {}, gs:[0x60]", out(reg) peb);
-            let ldr = *(peb.add(0x18) as *const *const u8);
-            // In x64, the head of the list is at Ldr + 0x10
-            let list_head = ldr.add(0x10);
-            let mut current_link = *(list_head as *const *const u8);
-
-            // Safety: Loop until we wrap back to the head
-            while current_link != list_head && !current_link.is_null() {
-                // BaseAddress is at offset 0x30
-                let base_addr = *(current_link.add(0x30) as *const *const u8);
-
-                // BaseDllName (UNICODE_STRING) is at offset 0x58
-                // UNICODE_STRING: [u16 Length, u16 MaxLength, PVOID Buffer]
-                let length_ptr = current_link.add(0x58) as *const u16;
-                let buffer_ptr = *(current_link.add(0x60) as *const *const u16);
-
-                if !buffer_ptr.is_null() {
-                    let length_chars = (*length_ptr as usize) / 2;
-                    if crate::utils::compare_ascii_utf16_ci(dll_name, buffer_ptr, length_chars) {
-                        return Ok(base_addr);
-                    }
-                }
-
-                current_link = *(current_link as *const *const u8);
-            }
-        }
-
+        let ldr = *(peb.add(0x18) as *const *const u8);
         #[cfg(target_arch = "x86")]
-        {
-            asm!("mov {}, fs:[0x30]", out(reg) peb);
-            let ldr = *(peb.add(0x0c) as *const *const u8);
-            let list_head = ldr.add(0x0c);
-            let mut current_link = *(list_head as *const *const u8);
+        let ldr = *(peb.add(0x0c) as *const *const u8);
 
-            while current_link != list_head && !current_link.is_null() {
-                // BaseAddress is at 0x18, BaseDllName is at 0x24
-                let base_addr = *(current_link.add(0x18) as *const *const u8);
-                let length_ptr = current_link.add(0x24) as *const u16;
-                let buffer_ptr = *(current_link.add(0x28) as *const *const u16);
+        let list_head = ldr.add(if cfg!(target_arch = "x86_64") { 0x10 } else { 0x0c });
+        let mut current_link = *(list_head as *const *const u8);
 
-                if !buffer_ptr.is_null() {
-                    let length_chars = (*length_ptr as usize) / 2;
-                    if crate::utils::compare_ascii_utf16(dll_name, buffer_ptr, length_chars) {
-                        return Ok(base_addr);
-                    }
+        while current_link != list_head && !current_link.is_null() {
+            let base_addr = *(current_link.add(if cfg!(target_arch = "x86_64") { 0x30 } else { 0x18 }) as *const *const u8);
+            let length_ptr = current_link.add(if cfg!(target_arch = "x86_64") { 0x58 } else { 0x24 }) as *const u16;
+            let buffer_ptr = *(current_link.add(if cfg!(target_arch = "x86_64") { 0x60 } else { 0x28 }) as *const *const u16);
+
+            if !buffer_ptr.is_null() {
+                let length_chars = (*length_ptr as usize) / 2;
+                // Hash the UTF-16 name and compare
+                if crate::algorithms::hash_utf16(buffer_ptr, length_chars) == dll_hash {
+                    return Ok(base_addr);
                 }
-                current_link = *(current_link as *const *const u8);
             }
+            current_link = *(current_link as *const *const u8);
         }
         Err(ResolveError::ModuleNotFound)
     }

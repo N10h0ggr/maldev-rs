@@ -20,18 +20,22 @@ The crate bypasses the standard Windows Loader by performing the following steps
 3. **Symbol Matching:** Compares these hashes against your precomputed target hash.
 4. **Pointer Retrieval:** Returns the memory address of the function, which is then cast to the user-defined function signature.
 
+
 ## Usage
 
 ### Basic Implementation
 
-Using the default **DJB2** hash to resolve a function:
+The `resolve_api!` macro is the recommended way to use this crate. It ensures that string literals are processed at compile-time and never reach the final binary.
 
 ```rust
 use api_hasher::resolve_api;
 
+// Define the function signature
 type GetLastErrorFn = unsafe extern "system" fn() -> u32;
 
 let get_last_error = unsafe {
+    // Both strings are hashed at compile-time
+    // only u32 constants remain in the binary
     resolve_api!("kernel32.dll", "GetLastError", GetLastErrorFn)
         .expect("Failed to resolve GetLastError")
 };
@@ -40,46 +44,93 @@ let err = unsafe { get_last_error() };
 
 ```
 
+### Manual Resolution (Literal Hashes)
+
+If you prefer to use pre-calculated hashes (e.g., generated from an external tool) to avoid using the macro, you can call `resolve_symbol` directly.
+
+```rust
+use api_hasher::resolve_symbol;
+
+// Pre-calculated DJB2 hashes for "kernel32.dll" and "GetTickCount"
+const KERNEL32_HASH: u32 = 0x70b46e14;
+const GETTICKCOUNT_HASH: u32 = 0x5fb27c52;
+
+type GetTickCountFn = unsafe extern "system" fn() -> u32;
+
+let ptr = resolve_symbol(KERNEL32_HASH, GETTICKCOUNT_HASH).expect("Symbol not found");
+let get_tick_count: GetTickCountFn = unsafe { core::mem::transmute(ptr) };
+
+```
+
 ### Selecting an Algorithm
 
-Algorithms are toggled via Cargo features. Disable default features to switch algorithms:
+Algorithms are toggled via Cargo features. All supported algorithms use **internal case-folding**, meaning `"KERNEL32.DLL"` and `"kernel32.dll"` will produce the same hash.
 
 ```toml
+# Use FNV1a instead of the default DJB2
 [dependencies]
 api_hasher = { version = "0.1", default-features = false, features = ["hash-fnv1a"] }
+
 ```
+
+To ensure users understand the importance of case normalization, we should update the documentation to emphasize that while the Windows Export Table is technically case-sensitive for function names, the **Process Environment Block (PEB)** is effectively case-insensitive for DLL names.
+
+Here is the updated documentation section for **Custom Hashing**.
+
+---
 
 ### Custom Hashing
 
-For full control over hashing behavior, the crate exposes a hash-custom feature. This is intended for cases where you need to exactly replicate an existing hashing scheme, for example when porting a loader from another language or matching hashes generated offline.
+To use a custom algorithm, enable the `hash-custom` feature.
 
-First, enable the feature and disable defaults:
+> **Important:** Your custom function must be a `const fn` to support the `resolve_api!` macro. This allows the compiler to execute your hashing logic at build-time.
+
 ```toml
 [dependencies]
-api_hasher = { version = "*", default-features = false, features = ["hash-custom"] }
+api_hasher = { version = "0.1", default-features = false, features = ["hash-custom"] }
+
 ```
 
-With this feature enabled, the crate expects you to provide the hashing logic. A minimal example, adapted from the test implementation, looks like this:
+#### Implementing Case Normalization
+
+When implementing a custom hash, you must decide how to handle character casing. In this crate, **case-folding (normalization) is highly recommended** for the following reasons:
+
+1. **DLL Resolution:** Windows module names in the PEB are often stored in uppercase (e.g., `KERNEL32.DLL`). If your hash is generated from a lowercase literal without normalization, the resolution will fail.
+2. **Signature Evasion:** Using a custom normalization scheme (or none at all) changes the resulting `u32` constant, helping to evade static signatures that look for well-known hashes of common APIs.
+
+You must provide a `const fn` named `custom_hash` in your crate root:
 
 ```rust
-use api_hasher::hash::custom::custom_hash;
-
-
-// Example custom hash (simple rotate-xor scheme)
-pub const fn custom_hash(name: &str) -> u32 {
-    let bytes = name.as_bytes();
+/// Custom hashing implementation.
+/// 
+/// # Case Sensitivity Note:
+/// We normalize 'A-Z' to 'a-z' here to ensure that "kernel32.dll" 
+/// matches "KERNEL32.DLL" as found in the Windows PEB.
+#[no_mangle]
+pub const fn custom_hash(data: &[u8]) -> u32 {
     let mut hash: u32 = 0;
     let mut i = 0;
     
-    while i < bytes.len() {
-        hash = hash.rotate_left(5) ^ bytes[i] as u32;
+    while i < data.len() {
+        // Perform manual lowercase normalization
+        let b = if data[i] >= b'A' && data[i] <= b'Z' { 
+            data[i] + 32 
+        } else { 
+            data[i] 
+        };
+        
+        // Example algorithm: Rotate Left + XOR
+        hash = hash.rotate_left(5) ^ (b as u32);
         i += 1;
     }
-    
     hash
 }
 ```
-As long as the same function is used consistently for both hash generation and API resolution, the rest of the crate operates identically. No changes to the resolver or macro usage are required.
+
+#### Why `const fn`?
+
+By marking your function as `const fn`, the Rust compiler can run this logic during the compilation of your project. This is the mechanism that allows `api_hasher` to replace your strings with numbers, completely removing the plaintext API names from your binary's data sections.
+
 
 ## Architecture & Platform Support
 

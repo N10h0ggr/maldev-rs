@@ -77,6 +77,17 @@ unsafe fn reflective_loader_impl(lp_base_address: *mut c_void) -> Result<(), Loa
     }
 
     // Resolve bootstrapping APIs
+    // NOTE: This will crash since resolve_api uses constant values and .rdata
+    // is not fixed yet. I recommend to try the following:
+    //
+    // // Manual resolution using raw hex literals to ensure Position Independence (PIC).
+    // // Hashes calculated via CRC32 (lowercase DLL "kernel32.dll", exact-case "VirtualAlloc").
+    // // 0x6AE392A0 = kernel32.dll
+    // // 0x011A832F = VirtualAlloc
+    // let ptr = resolve_symbol(0x6AE392A0, 0x011A832F)
+    //    .map_err(|_| LoaderError::ApiResolutionFailed)?;
+    //
+    // let virtual_alloc: VirtualAllocFn = unsafe { core::mem::transmute(ptr) };
     let virtual_alloc = resolve_api!("kernel32.dll", "VirtualAlloc", VirtualAllocFn)
         .map_err(|_| LoaderError::ApiResolutionFailed)?;
 
